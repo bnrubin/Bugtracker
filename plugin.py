@@ -169,7 +169,6 @@ class Bugtracker(callbacks.PluginRegexp):
         sure_bug = match.group('bt').endswith('bug') or match.group('bt').endswith('bug')
         # FIXME dig into supybot docs/code
         #if conf.supybot.reply.whenAddressedBy.strings:
-        #    print type(conf.supybot.reply.whenAddressedBy.strings)
         #    for p in conf.supybot.reply.whenAddressedBy.strings:
         #        if s.startswith(str(p)):
         #            return
@@ -371,17 +370,17 @@ class Malone(IBugtracker):
         # Status sort: 
         try:
             statuses   = ['Rejected', 'Fix Committed', 'Fix Released', 'Confirmed', 'In Progress', 'Needs Info', 'Unconfirmed']
-            severities = ['Wishlist', 'Minor', 'Normal', 'Major', 'Critical']
+            severities = ['Untriaged', 'Wishlist', 'Minor', 'Low', 'Normal', 'Medium', 'Major', 'High', 'Critical']
             if task1['status'] not in statuses and task2['status'] in statuses: return 1
             if task1['status'] in statuses and task2['status'] not in statuses: return -1
-            if task1['severity'] not in severities and task2['severity'] in severities: return 1
-            if task1['severity'] in severities and task2['severity'] not in severities: return -1
+            if task1['importance'] not in severities and task2['importance'] in severities: return 1
+            if task1['importance'] in severities and task2['importance'] not in severities: return -1
             if not (task1['status'] == task2['status']):
                 if statuses.index(task1['status']) < statuses.index(task2['status']):
                     return -1
                 return 1
-            if not (task1['severity'] == task2['severity']):
-                if severities.index(task1['severity']) < severities.index(task2['severity']):
+            if not (task1['importance'] == task2['importance']):
+                if severities.index(task1['importance']) < severities.index(task2['importance']):
                     return -1
                 return 1
         except: # Launchpad changed again?
