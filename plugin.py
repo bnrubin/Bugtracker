@@ -159,7 +159,7 @@ class Bugtracker(callbacks.PluginRegexp):
     list = wrap(list, [additional('text')])
 
     def bugSnarfer(self, irc, msg, match):
-        r"""\b(?P<bt>(([a-z]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und))\s*#?\d+(?!\d*\.\d+))*)"""
+        r"""\b(?P<bt>(([a-z]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
         if not self.registryValue('bugSnarfer', msg.args[0]):
             return
         # Don't double on commands
