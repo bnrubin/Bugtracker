@@ -15,15 +15,19 @@
 import supybot.utils as utils
 from supybot.commands import *
 import supybot.plugins as plugins
+import supybot.ircmsgs as ircmsgs
 import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
 import supybot.conf as conf
 import supybot.registry as registry
+import supybot.schedule as schedule
 
-import re
+import re, os, time
 import xml.dom.minidom as minidom
 from htmlentitydefs import entitydefs as entities
 import email.FeedParser
+
+#datadir = '/home/dennis/ubugtu/data/bugmail'
 
 def registerBugtracker(name, url='', description='', trackertype=''):
     conf.supybot.plugins.Bugtracker.bugtrackers().add(name)
@@ -88,6 +92,86 @@ class Bugtracker(callbacks.PluginRegexp):
             else:
                 raise BugtrackerError("Unknown trackertype: %s" % group.trackertype())
         self.shorthand = utils.abbrev(self.db.keys())
+        try:
+            schedule.removeEvent(self.name())
+        except:
+            pass
+        schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name())
+        self.shown = {}
+
+    def is_ok(self, channel, tracker, bug):
+        now = time.time()
+        for k in self.shown.keys():
+            if self.shown[k] < now - 60:
+                self.shown.pop(k)
+        if (channel, tracker, bug) not in self.shown:
+            self.shown[(channel, tracker, bug)] = now
+            return True
+        return False
+
+    def reportnewbugs(self,irc):
+        # Compile list of bugs
+        print "Reporting new bugs"
+        tracker = self.db['malone']
+        bugs = {}
+        for c in irc.state.channels:
+            dir = self.registryValue('bugReporter', channel=c)
+            if not dir:
+                continue
+            print "Reporting in %s (%s)" % (c, dir)
+            if dir not in bugs:
+                print "Reloading info from %s" % dir
+                bugs[dir] = {}
+                latest = int(open(os.path.join(dir,'latest_bug')).read())
+                print "Previous latest: %d" % latest
+                for file in os.listdir(os.path.join(dir,'Maildir','new')):
+                    print "Checking %s" % file
+                    fd = open(os.path.join(dir,'Maildir','new',file))
+                    _data = fd.readlines()
+                    fd.close()
+                    os.unlink(os.path.join(dir,'Maildir','new',file))
+                    component = ''
+                    data = []
+                    for line in _data:
+                        #print line, data
+                        print line
+                        if line[0] in ' \t':
+                            data[-1] += '%s ' % line.strip()
+                        else:
+                            data.append('%s ' % line.strip())
+                    print data
+                    for line in data:
+                        if line.startswith('X-Launchpad-Bug:') and not component:
+                            print line
+                            if 'component' in line:
+                                component = line[line.find('component=')+10:]
+                                component = component[:component.find(';')]
+                                if component == 'None':
+                                    component = ''
+                                print component
+                        if line.startswith('Reply-To:'):
+                            try:
+                                bug = int(line.split()[2])
+                                if bug > latest and bug not in bugs[dir]:
+                                    try:
+                                        if component:
+                                            bugs[dir][bug] = self.get_bug(tracker, bug).replace('"','(%s) "' % component, 1)
+                                        else:
+                                            bugs[dir][bug] = self.get_bug(tracker, bug)
+                                    except:
+                                        print "Unable to get bug %d" % b
+                            except:
+                                pass # Ignore errors. Iz wrong mail
+                            break
+                if bugs[dir]:
+                    latest = max(bugs[dir].keys())
+                print latest, bugs
+                fd = open(os.path.join(dir,'latest_bug'),'w')
+                fd.write('%d' % latest)
+                fd.close()
+            # Now show them
+            for b in sorted(bugs[dir].keys()):
+                irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[dir][b][bugs[dir][b].find('bug ')+4:]))
 
     def add(self, irc, msg, args, name, trackertype, url, description):
         """<name> <type> <url> [<description>]
@@ -174,7 +258,7 @@ class Bugtracker(callbacks.PluginRegexp):
         #            return
         # Get tracker name
         bugids = match.group('bug')
-        reps = ((' ',''),('#',''),('and',','),('en',','),('et',','),('und',','))
+        reps = ((' ',''),('#',''),('and',','),('en',','),('et',','),('und',','),('ir',','))
         for r in reps:
             bugids = bugids.replace(r[0],r[1])
         bugids = bugids.split(',')[:5]
@@ -210,6 +294,8 @@ class Bugtracker(callbacks.PluginRegexp):
         else:
             for bugid in bugids:
                 bugid = int(bugid)
+                if not self.is_ok(msg.args[0],tracker, bugid):
+                    continue
                 try:
                     report = self.get_bug(tracker,bugid)
                 except BugtrackerError, e:
@@ -228,6 +314,8 @@ class Bugtracker(callbacks.PluginRegexp):
         try:
             tracker = self.get_tracker(match.group(0),match.group('sfurl'))
             if not tracker:
+                return
+            if not self.is_ok(msg.args[0],tracker, int(match.group('bug'))):
                 return
             report = self.get_bug(tracker,int(match.group('bug')), do_url = False)
         except BugtrackerError, e:
@@ -424,7 +512,9 @@ class Malone(IBugtracker):
 # Debbugs sucks donkeyballs
 # * HTML pages are inconsistent
 # * Parsing mboxes gets incorrect with cloning perversions (eg with bug 330000)
-# * No sane way of accessing bug reports in a machine readable way (bts2ldap has no search on bugid)
+# * No sane way of accessing bug reports in a machine readable way (bts2ldap
+#   has no search on bugid)
+# * The damn thing allow incomplete bugs, eg bugs without severity set. WTF?!?
 #
 # So sometimes the plugin will return incorrect things - so what. Fix the
 # damn bts before complaining.
@@ -441,8 +531,8 @@ class Debbugs(IBugtracker):
             h2 = h.lower()
             if h2.startswith('to') and ('%d-close' % id in h2 or '%d-done' % id in h2):
                 data['status'] = 'Closed'
-            if not data['title'] and h2.startswith('subject'):
-                data['title'] = h.strip()
+            if data['title'] == 'unknown' and h2.startswith('subject'):
+                data['title'] = h[8:].strip()
     
         infirstmail = False
         for l in text.split("\n"):
@@ -481,7 +571,7 @@ class Debbugs(IBugtracker):
         if '<p>There is no record of Bug' in bugdata:
             raise BugtrackerError, "%s bug %d does not exist" % (self.description, id)
         try:
-            data = {'package': None,'title': None,'severity':None,'status':'Open'}
+            data = {'package': 'unknown','title': 'unknown','severity':'unknown','status':'Open'}
             for m in bugdata.split("\n\n\nFrom"):
                 self.parse_mail(id, m, data)
         except Exception, e:

@@ -11,7 +11,7 @@ GNU General Public License for more details.
 
 The syntax to add a tracker is weird, here are some examples:
 @bugtracker add freedesktop bugzilla https://bugs.freedesktop.org Freedesktop
-@bugtracker add malone malone http://launchpad.net/malone Malone
+@bugtracker add malone malone https://launchpad.net/malone Malone
 @bugtracker add debian debbugs http://bugs.debian.org Debian
 @bugtracker add openoffice issuezilla http://www.openoffice.org/issues OpenOffice
 @bugtracker add django trac http://code.djangoproject.com/ticket Django

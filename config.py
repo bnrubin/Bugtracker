@@ -27,6 +27,8 @@ conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'bugSnarfer',
     registry.Boolean(False, """Determines whether the bug snarfer will be
     enabled, such that any Bugtracker URLs and bug ### seen in the channel
     will have their information reported into the channel."""))
+conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'bugReporter',
+    registry.String('', """Report new bugs (experimental)"""))
 conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'replyNoBugtracker',
     registry.String('I don\'t have a bugtracker %s.', """Determines the phrase
     to use when notifying the user that there is no information about that
