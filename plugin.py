@@ -114,6 +114,7 @@ class Bugtracker(callbacks.PluginRegexp):
         print "Reporting new bugs"
         tracker = self.db['malone']
         bugs = {}
+        fixed = {}
         for c in irc.state.channels:
             dir = self.registryValue('bugReporter', channel=c)
             if not dir:
@@ -122,8 +123,6 @@ class Bugtracker(callbacks.PluginRegexp):
             if dir not in bugs:
                 print "Reloading info from %s" % dir
                 bugs[dir] = {}
-                latest = int(open(os.path.join(dir,'latest_bug')).read())
-                print "Previous latest: %d" % latest
                 for file in os.listdir(os.path.join(dir,'Maildir','new')):
                     print "Checking %s" % file
                     fd = open(os.path.join(dir,'Maildir','new',file))
@@ -133,42 +132,42 @@ class Bugtracker(callbacks.PluginRegexp):
                     component = ''
                     data = []
                     for line in _data:
-                        #print line, data
-                        print line
                         if line[0] in ' \t':
                             data[-1] += '%s ' % line.strip()
                         else:
                             data.append('%s ' % line.strip())
-                    print data
                     for line in data:
                         if line.startswith('X-Launchpad-Bug:') and not component:
-                            print line
                             if 'component' in line:
                                 component = line[line.find('component=')+10:]
                                 component = component[:component.find(';')]
                                 if component == 'None':
                                     component = ''
-                                print component
                         if line.startswith('Reply-To:'):
+                            print line
                             try:
                                 bug = int(line.split()[2])
-                                if bug > latest and bug not in bugs[dir]:
-                                    try:
-                                        if component:
-                                            bugs[dir][bug] = self.get_bug(tracker, bug).replace('"','(%s) "' % component, 1)
-                                        else:
-                                            bugs[dir][bug] = self.get_bug(tracker, bug)
-                                    except:
-                                        print "Unable to get bug %d" % b
+                                try:
+                                    os.makedirs(os.path.join(dir,str(int(bug/1000))))
+                                except:
+                                    pass
+                                if bug > 58184 and not os.path.exists(os.path.join(dir,str(int(bug/1000)),str(bug))):
+                                    print "New bug: %d" % bug
+                                    fd2 = open(os.path.join(dir,str(int(bug/1000)),str(bug)),'w')
+                                    fd2.close()
+                                    if bug not in bugs[dir]:
+                                        try:
+                                            if component:
+                                                bugs[dir][bug] = self.get_bug(tracker, bug).replace('"','(%s) "' % component, 1)
+                                            else:
+                                                bugs[dir][bug] = self.get_bug(tracker, bug)
+                                        except:
+                                            print "Unable to get bug %d" % b
                             except:
+                                raise
                                 pass # Ignore errors. Iz wrong mail
                             break
-                if bugs[dir]:
-                    latest = max(bugs[dir].keys())
-                print latest, bugs
-                fd = open(os.path.join(dir,'latest_bug'),'w')
-                fd.write('%d' % latest)
-                fd.close()
+            print "New bugs in %s (%s): %s" % (c, dir, str(bugs[dir].keys()))
             # Now show them
             for b in sorted(bugs[dir].keys()):
                 irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[dir][b][bugs[dir][b].find('bug ')+4:]))
