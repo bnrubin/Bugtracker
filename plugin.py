@@ -327,7 +327,7 @@ class Bugtracker(callbacks.PluginRegexp):
     def oopsSnarfer(self, irc, msg, match):
         r"OOPS-(?P<oopsid>\d*[A-Z]\d+)"
         oopsid = match.group(1)
-        irc.reply("https://chinstrap.ubuntu.com/~jamesh/oops.cgi/%s" % oopsid, prefixNick=False)
+        irc.reply("https://devpad.canonical.com/~jamesh/oops.cgi/%s" % oopsid, prefixNick=False)
 
     def get_tracker(self,snarfurl,sfdata):
         for t in self.db.keys():
