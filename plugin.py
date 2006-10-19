@@ -27,8 +27,6 @@ import xml.dom.minidom as minidom
 from htmlentitydefs import entitydefs as entities
 import email.FeedParser
 
-#datadir = '/home/dennis/ubugtu/data/bugmail'
-
 def registerBugtracker(name, url='', description='', trackertype=''):
     conf.supybot.plugins.Bugtracker.bugtrackers().add(name)
     group       = conf.registerGroup(conf.supybot.plugins.Bugtracker.bugtrackers, name)
@@ -298,6 +296,9 @@ class Bugtracker(callbacks.PluginRegexp):
                 try:
                     report = self.get_bug(tracker,bugid)
                 except BugtrackerError, e:
+                    if 'private' in str(e):
+                        irc.reply("Bug %d on http://launchpad.net/bugs/%d is private" % (bugid, bugid))
+                        return
                     if not sure_bug and bugid < 30:
                         return
                     irc.error(str(e))
@@ -330,6 +331,9 @@ class Bugtracker(callbacks.PluginRegexp):
         irc.reply("https://devpad.canonical.com/~jamesh/oops.cgi/%s" % oopsid, prefixNick=False)
 
     def get_tracker(self,snarfurl,sfdata):
+        snarfhost = snarfurl.replace('http://','').replace('https://','')
+        if '/' in snarfurl:
+            snarfhost = snarfhost[:snarfhost.index('/')]
         for t in self.db.keys():
             tracker = self.db[t]
             url = tracker.url.replace('http://','').replace('https://','')
@@ -339,7 +343,7 @@ class Bugtracker(callbacks.PluginRegexp):
                     return tracker
             if '/' in url:
                 url = url[:url.index('/')]
-            if url in snarfurl:
+            if url in snarfhost:
                 return tracker
         if 'sourceforge.net' in snarfurl:
             return self.db['sourceforge']
@@ -456,8 +460,8 @@ class Malone(IBugtracker):
     def _sort(self, task1, task2):
         # Status sort: 
         try:
-            statuses   = ['Rejected', 'Fix Committed', 'Fix Released', 'Confirmed', 'In Progress', 'Needs Info', 'Unconfirmed']
-            severities = ['Untriaged', 'Wishlist', 'Minor', 'Low', 'Normal', 'Medium', 'Major', 'High', 'Critical']
+            statuses   = ['Rejected', 'Fix Released', 'Fix Committed', 'Unconfirmed', 'Needs Info', 'In Progress', 'Confirmed']
+            severities = ['Undecided', 'Wishlist', 'Minor', 'Low', 'Normal', 'Medium', 'Major', 'High', 'Critical']
             if task1['status'] not in statuses and task2['status'] in statuses: return 1
             if task1['status'] in statuses and task2['status'] not in statuses: return -1
             if task1['importance'] not in severities and task2['importance'] in severities: return 1
