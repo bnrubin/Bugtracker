@@ -241,7 +241,7 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def bugSnarfer(self, irc, msg, match):
         r"""\b(?P<bt>(([a-z]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
-        if not self.registryValue('bugSnarfer', msg.args[0]):
+        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
         # Don't double on commands
         s = str(msg).split(':')[2]
@@ -309,7 +309,7 @@ class Bugtracker(callbacks.PluginRegexp):
     #&group_id=\d+&at_id=\d+
     def turlSnarfer(self, irc, msg, match):
         "(?P<tracker>https?://.*?)(show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|/ticket/|tracker/.*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
-        if not self.registryValue('bugSnarfer', msg.args[0]):
+        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
         try:
             tracker = self.get_tracker(match.group(0),match.group('sfurl'))
