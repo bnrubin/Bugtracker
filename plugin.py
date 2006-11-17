@@ -162,7 +162,7 @@ class Bugtracker(callbacks.PluginRegexp):
                                         except:
                                             print "Unable to get bug %d" % b
                             except:
-                                raise
+                                #raise
                                 pass # Ignore errors. Iz wrong mail
                             break
             print "New bugs in %s (%s): %s" % (c, dir, str(bugs[dir].keys()))
@@ -604,6 +604,32 @@ class Trac(IBugtracker):
             if 'headers="h_severity"' in l:
                 severity = l[l.find('>')+1:l.find('</')]
         return (package, title, severity, status, "%s/%s" % (self.url, id))
+        
+class WikiForms(IBugtracker):
+    def get_bug(self, id):
+        def strip_tags(s):
+            while '<' in s and '>' in s:
+                s = str(s[:s.find('<')]) + str(s[s.find('>')+1:])
+            return s
+
+        url = "%s/%05d" % (self.url, id)
+        print url
+        try:
+            bugdata = utils.web.getUrl(url)
+        except Exception, e:
+            s = 'Could not parse data returned by %s: %s' % (self.description, e)
+            raise BugtrackerError, s
+        for l in bugdata.split("\n"):
+            l2 = l.lower()
+            if '<dt>importance</dt>' in l2:
+                severity = 'Importance ' + strip_tags(l[l.find('<dd>')+4:])
+            if '<dt>summary</dt>' in l2:
+                title = strip_tags(l[l.find('<dd>')+4:])
+            if '<dt>status</dt>' in l2:
+                status = strip_tags(l[l.find('<dd>')+4:])
+            if '<dt>category</dt>' in l2:
+                package = strip_tags(l[l.find('<dd>')+4:])
+        return (package, title, severity, status, "%s/%05d" % (self.url, id))
 
 sfre = re.compile(r"""
                   .*?
