@@ -161,6 +161,7 @@ class Bugtracker(callbacks.PluginRegexp):
                                                 bugs[dir][bug] = self.get_bug(tracker, bug)
                                         except:
                                             #print "Unable to get bug %d" % b
+                                            pass
                             except:
                                 #raise
                                 pass # Ignore errors. Iz wrong mail
