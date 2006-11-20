@@ -109,7 +109,7 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def reportnewbugs(self,irc):
         # Compile list of bugs
-        print "Reporting new bugs"
+        #print "Reporting new bugs"
         tracker = self.db['malone']
         bugs = {}
         fixed = {}
@@ -117,12 +117,12 @@ class Bugtracker(callbacks.PluginRegexp):
             dir = self.registryValue('bugReporter', channel=c)
             if not dir:
                 continue
-            print "Reporting in %s (%s)" % (c, dir)
+            #print "Reporting in %s (%s)" % (c, dir)
             if dir not in bugs:
-                print "Reloading info from %s" % dir
+                #print "Reloading info from %s" % dir
                 bugs[dir] = {}
                 for file in os.listdir(os.path.join(dir,'Maildir','new')):
-                    print "Checking %s" % file
+                    #print "Checking %s" % file
                     fd = open(os.path.join(dir,'Maildir','new',file))
                     _data = fd.readlines()
                     fd.close()
@@ -142,7 +142,7 @@ class Bugtracker(callbacks.PluginRegexp):
                                 if component == 'None':
                                     component = ''
                         if line.startswith('Reply-To:'):
-                            print line
+                            #print line
                             try:
                                 bug = int(line.split()[2])
                                 try:
@@ -150,7 +150,7 @@ class Bugtracker(callbacks.PluginRegexp):
                                 except:
                                     pass
                                 if bug > 58184 and not os.path.exists(os.path.join(dir,str(int(bug/1000)),str(bug))):
-                                    print "New bug: %d" % bug
+                                    #print "New bug: %d" % bug
                                     fd2 = open(os.path.join(dir,str(int(bug/1000)),str(bug)),'w')
                                     fd2.close()
                                     if bug not in bugs[dir]:
@@ -160,12 +160,12 @@ class Bugtracker(callbacks.PluginRegexp):
                                             else:
                                                 bugs[dir][bug] = self.get_bug(tracker, bug)
                                         except:
-                                            print "Unable to get bug %d" % b
+                                            #print "Unable to get bug %d" % b
                             except:
                                 #raise
                                 pass # Ignore errors. Iz wrong mail
                             break
-            print "New bugs in %s (%s): %s" % (c, dir, str(bugs[dir].keys()))
+            #print "New bugs in %s (%s): %s" % (c, dir, str(bugs[dir].keys()))
             # Now show them
             for b in sorted(bugs[dir].keys()):
                 irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[dir][b][bugs[dir][b].find('bug ')+4:]))
@@ -613,7 +613,7 @@ class WikiForms(IBugtracker):
             return s
 
         url = "%s/%05d" % (self.url, id)
-        print url
+        #print url
         try:
             bugdata = utils.web.getUrl(url)
         except Exception, e:
