@@ -96,6 +96,7 @@ class Bugtracker(callbacks.PluginRegexp):
             pass
         schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name())
         self.shown = {}
+        self.nomailtime = 0
 
     def is_ok(self, channel, tracker, bug):
         now = time.time()
@@ -121,6 +122,15 @@ class Bugtracker(callbacks.PluginRegexp):
             if dir not in bugs:
                 #print "Reloading info from %s" % dir
                 bugs[dir] = {}
+                if dir.endswith('bugmail'):
+                    if len(os.listdir(os.path.join(dir,'Maildir','new'))) == 0:
+                        self.nomailtime += 1
+                        if self.nomailtime == 30:
+                            irc.queueMsg(ircmsgs.privmsg(c,'WARNING: No bugmail received in 30 minutes. Please poke Seveas.'))
+                            self.nomailtime = 0
+                    else:
+                        #irc.queueMsg(ircmsgs.privmsg('#ubuntu-bots','Seveas: your lucky number is %d' % self.nomailtime))
+                        self.nomailtime = 0
                 for file in os.listdir(os.path.join(dir,'Maildir','new')):
                     #print "Checking %s" % file
                     fd = open(os.path.join(dir,'Maildir','new',file))
