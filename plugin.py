@@ -22,10 +22,15 @@ import supybot.conf as conf
 import supybot.registry as registry
 import supybot.schedule as schedule
 
-import re, os, time
+import re, os, time, imaplib, commands
 import xml.dom.minidom as minidom
 from htmlentitydefs import entitydefs as entities
 import email.FeedParser
+
+bugreporter_base = '/home/dennis/ubugtu/data/bugmail'
+imap_server = 'localhost'
+imap_user = commands.getoutput('cat /home/dennis/ubugtu/imap_user')
+imap_password = commands.getoutput('cat /home/dennis/ubugtu/imap_password')
 
 def registerBugtracker(name, url='', description='', trackertype=''):
     conf.supybot.plugins.Bugtracker.bugtrackers().add(name)
@@ -98,10 +103,16 @@ class Bugtracker(callbacks.PluginRegexp):
         self.shown = {}
         self.nomailtime = 0
 
+    def die(self):
+        try:
+            schedule.removeEvent(self.name())
+        except:
+            pass
+
     def is_ok(self, channel, tracker, bug):
         now = time.time()
         for k in self.shown.keys():
-            if self.shown[k] < now - 60:
+            if self.shown[k] < now - self.registryValue('repeatdelay', channel):
                 self.shown.pop(k)
         if (channel, tracker, bug) not in self.shown:
             self.shown[(channel, tracker, bug)] = now
@@ -110,76 +121,64 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def reportnewbugs(self,irc):
         # Compile list of bugs
-        #print "Reporting new bugs"
+        print "Reporting new bugs"
         tracker = self.db['malone']
         bugs = {}
-        fixed = {}
-        for c in irc.state.channels:
-            dir = self.registryValue('bugReporter', channel=c)
-            if not dir:
+        sc = imaplib.IMAP4_SSL(imap_server)
+        sc.login(imap_user, imap_password)
+        sc.select('INBOX')
+        new_mail = sc.search(None, '(UNSEEN)')[1][0].split()[:20]
+        for m in new_mail:
+            print "Loading %s" % m
+            msg = sc.fetch(m, 'RFC822')[1][0][1]
+            #print msg
+            fp = email.FeedParser.FeedParser()
+            fp.feed(msg)
+            bug = fp.close()
+            #print "Mail parsed"
+            # Determine bug number, component and tag
+            try:
+                id = int(bug['Reply-To'].split()[1])
+            except:
                 continue
-            #print "Reporting in %s (%s)" % (c, dir)
-            if dir not in bugs:
-                #print "Reloading info from %s" % dir
-                bugs[dir] = {}
-                if dir.endswith('bugmail'):
-                    if len(os.listdir(os.path.join(dir,'Maildir','new'))) == 0:
-                        self.nomailtime += 1
-                        if self.nomailtime == 30:
-                            irc.queueMsg(ircmsgs.privmsg(c,'WARNING: No bugmail received in 30 minutes. Please poke Seveas.'))
-                            self.nomailtime = 0
-                    else:
-                        #irc.queueMsg(ircmsgs.privmsg('#ubuntu-bots','Seveas: your lucky number is %d' % self.nomailtime))
-                        self.nomailtime = 0
-                for file in os.listdir(os.path.join(dir,'Maildir','new')):
-                    #print "Checking %s" % file
-                    fd = open(os.path.join(dir,'Maildir','new',file))
-                    _data = fd.readlines()
-                    fd.close()
-                    os.unlink(os.path.join(dir,'Maildir','new',file))
-                    component = ''
-                    data = []
-                    for line in _data:
-                        if line[0] in ' \t':
-                            data[-1] += '%s ' % line.strip()
+            tag = bug['Delivered-To']
+            tag = tag[tag.find('+')+1:tag.find('@')]
+            component = bug['X-Launchpad-Bug']
+            if 'component' in component:
+                component = component[component.find('component=')+10:]
+                component = component[:component.find(';')].replace('None','')
+            else:
+                component = ''
+            if tag not in bugs:
+                bugs[tag] = {}
+            #print "Data extracted"
+            if id not in bugs[tag]:
+                try:
+                    os.makedirs(os.path.join(bugreporter_base,tag,str(int(id/1000))))
+                except:
+                    pass
+                print os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id))
+                if id > 58184 and not os.path.exists(os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id))):
+                    print "New bug: %d" % id
+                    fd2 = open(os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id)),'w')
+                    fd2.close()
+                    try:
+                        if component:
+                            bugs[tag][id] = self.get_bug(tracker, id, False)[0].replace('"','(%s) "' % component, 1)
                         else:
-                            data.append('%s ' % line.strip())
-                    for line in data:
-                        if line.startswith('X-Launchpad-Bug:') and not component:
-                            if 'component' in line:
-                                component = line[line.find('component=')+10:]
-                                component = component[:component.find(';')]
-                                if component == 'None':
-                                    component = ''
-                        if line.startswith('Reply-To:'):
-                            #print line
-                            try:
-                                bug = int(line.split()[2])
-                                try:
-                                    os.makedirs(os.path.join(dir,str(int(bug/1000))))
-                                except:
-                                    pass
-                                if bug > 58184 and not os.path.exists(os.path.join(dir,str(int(bug/1000)),str(bug))):
-                                    #print "New bug: %d" % bug
-                                    fd2 = open(os.path.join(dir,str(int(bug/1000)),str(bug)),'w')
-                                    fd2.close()
-                                    if bug not in bugs[dir]:
-                                        try:
-                                            if component:
-                                                bugs[dir][bug] = self.get_bug(tracker, bug).replace('"','(%s) "' % component, 1)
-                                            else:
-                                                bugs[dir][bug] = self.get_bug(tracker, bug)
-                                        except:
-                                            #print "Unable to get bug %d" % b
-                                            pass
-                            except:
-                                #raise
-                                pass # Ignore errors. Iz wrong mail
-                            break
-            #print "New bugs in %s (%s): %s" % (c, dir, str(bugs[dir].keys()))
-            # Now show them
-            for b in sorted(bugs[dir].keys()):
-                irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[dir][b][bugs[dir][b].find('bug ')+4:]))
+                            bugs[tag][id] = self.get_bug(tracker, id, False)[0]
+                    except:
+                        print "Cannot get bug %d" % id
+        for c in irc.state.channels:
+            tag = self.registryValue('bugReporter', channel=c)
+            if not tag:
+                continue
+            if tag not in bugs.keys():
+                print "No new bugs in %s" % tag
+                continue
+            print "New bugs in %s (%s): %s" % (c, tag, str(bugs[tag].keys()))
+            for b in sorted(bugs[tag].keys()):
+                irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[tag][b][bugs[tag][b].find('bug ')+4:]))
 
     def add(self, irc, msg, args, name, trackertype, url, description):
         """<name> <type> <url> [<description>]
@@ -286,7 +285,7 @@ class Bugtracker(callbacks.PluginRegexp):
                 name = ''
                 pass
         if not name:
-            snarfTarget = self.registryValue('snarfTarget', msg.args[0])
+            snarfTarget = self.registryValue('snarfTarget', msg.args[0]).lower()
             if not snarfTarget:
                 return
             try:
@@ -305,7 +304,7 @@ class Bugtracker(callbacks.PluginRegexp):
                 if not self.is_ok(msg.args[0],tracker, bugid):
                     continue
                 try:
-                    report = self.get_bug(tracker,bugid)
+                    report = self.get_bug(tracker,bugid,self.registryValue('showassignee', msg.args[0]))
                 except BugtrackerError, e:
                     if 'private' in str(e):
                         irc.reply("Bug %d on http://launchpad.net/bugs/%d is private" % (bugid, bugid))
@@ -314,7 +313,8 @@ class Bugtracker(callbacks.PluginRegexp):
                         return
                     irc.error(str(e))
                 else:
-                    irc.reply(report, prefixNick=False)
+                    for r in report:
+                        irc.reply(r, prefixNick=False)
 
     #show_bug.cgi?id=|bugreport.cgi?bug=|(bugs|+bug)/|ticket/|tracker/.*aid=
     #&group_id=\d+&at_id=\d+
@@ -328,11 +328,12 @@ class Bugtracker(callbacks.PluginRegexp):
                 return
             if not self.is_ok(msg.args[0],tracker, int(match.group('bug'))):
                 return
-            report = self.get_bug(tracker,int(match.group('bug')), do_url = False)
+            report = self.get_bug(tracker,int(match.group('bug')),self.registryValue('showassignee', msg.args[0]), do_url = False)
         except BugtrackerError, e:
             irc.error(str(e))
         else:
-            irc.reply(report, prefixNick=False)
+            for r in report:
+                irc.reply(r, prefixNick=False)
     turlSnarfer = urlSnarfer(turlSnarfer)
 
     # Only useful for launchpad developers
@@ -367,16 +368,23 @@ class Bugtracker(callbacks.PluginRegexp):
                 return tracker
         return None
 
-    def get_bug(self, tracker, id, do_url = True):
-        (product, title, severity, status, url) = tracker.get_bug(id)
-        severity = severity[0].upper() + severity[1:].lower()
-        status = status[0].upper() + status[1:].lower()
-        if not do_url:
-            url = ''
-        if product:
-            return "%s bug %s in %s \"%s\" [%s,%s] %s" % (tracker.description, id, product, 
-                                                          title, severity, status, url)
-        return "%s bug %s \"%s\" [%s,%s] %s" % (tracker.description, id, title, severity, status, url)
+    def get_bug(self, tracker, id, do_assignee, do_url = True):
+        reports = []
+        for r in tracker.get_bug(id):
+            print r
+            (bid, product, title, severity, status, assignee, url) = r
+            severity = severity[0].upper() + severity[1:].lower()
+            status = status[0].upper() + status[1:].lower()
+            if not do_url:
+                url = ''
+            if product:
+                reports.append("%s bug %s in %s \"%s\" [%s,%s] %s" % (tracker.description, bid, product, 
+                                                                      title, severity, status, url))
+            else:
+                reports.append("%s bug %s \"%s\" [%s,%s] %s" % (tracker.description, bid, title, severity, status, url))
+            if do_assignee and assignee:
+                reports[-1] = reports[-1] + (" - Assigned to %s" % assignee)
+        return reports
 
 # Define all bugtrackers
 class IBugtracker:
@@ -431,10 +439,11 @@ class Bugzilla(IBugtracker):
                 pass
             component = _getnodetxt(bug_n.getElementsByTagName('component')[0])
             severity = _getnodetxt(bug_n.getElementsByTagName('bug_severity')[0])
+            assignee = _getnodetxt(bug_n.getElementsByTagName('assigned_to')[0])
         except Exception, e:
             s = 'Could not parse XML returned by %s bugzilla: %s' % (self.description, e)
             raise BugtrackerError, s
-        return (component, title, severity, status, "%s/show_bug.cgi?id=%d" % (self.url, id))
+        return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
 
 class Issuezilla(IBugtracker):
     def get_bug(self, id):
@@ -458,10 +467,11 @@ class Issuezilla(IBugtracker):
                 pass
             component = _getnodetxt(bug_n.getElementsByTagName('component')[0])
             severity = _getnodetxt(bug_n.getElementsByTagName('issue_type')[0])
+            assignee = _getnodetxt(bug_n.getElementsByTagName('assigned_to')[0])
         except Exception, e:
             s = 'Could not parse XML returned by %s bugzilla: %s' % (self.description, e)
             raise BugtrackerError, s
-        return (component, title, severity, status, "%s/show_bug.cgi?id=%d" % (self.url, id))
+        return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
 
 class Malone(IBugtracker):
     def _parse(self, task):
@@ -516,11 +526,16 @@ class Malone(IBugtracker):
         except Exception, e:
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
+        # Try and find duplicates
         t = taskdata['task']
         if '(' in t:
             t = t[:t.rfind('(') -1]
-        return (t, bugdata['title'], taskdata['importance'], 
-                taskdata['status'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))
+        if bugdata['duplicate-of']:
+            dupbug = self.get_bug(int(bugdata['duplicate-of']))
+            return [(id, t, bugdata['title'] + (' (dup-of: %d)' % dupbug[0][0]), taskdata['importance'], 
+                    taskdata['status'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))] + dupbug
+        return [(id, t, bugdata['title'], taskdata['importance'], 
+                taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))]
             
 # <rant>
 # Debbugs sucks donkeyballs
@@ -591,7 +606,7 @@ class Debbugs(IBugtracker):
         except Exception, e:
             s = 'Could not parse data returned by %s bugtracker: %s' % (self.description, e)
             raise BugtrackerError, s
-        return (data['package'], data['title'], data['severity'], data['status'], "%s/%s" % (self.url, id))
+        return [(id, data['package'], data['title'], data['severity'], data['status'], '', "%s/%s" % (self.url, id))]
 
 # For trac based trackers we also need to do some screenscraping - should be
 # doable unless a certain track instance uses weird templates.
@@ -614,7 +629,9 @@ class Trac(IBugtracker):
                 package = l[l.find('>')+1:l.find('</')]
             if 'headers="h_severity"' in l:
                 severity = l[l.find('>')+1:l.find('</')]
-        return (package, title, severity, status, "%s/%s" % (self.url, id))
+            if 'headers="h_owner"' in l:
+                assignee = l[l.find('>')+1:l.find('</')]
+        return [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
         
 class WikiForms(IBugtracker):
     def get_bug(self, id):
@@ -624,7 +641,6 @@ class WikiForms(IBugtracker):
             return s
 
         url = "%s/%05d" % (self.url, id)
-        #print url
         try:
             bugdata = utils.web.getUrl(url)
         except Exception, e:
@@ -640,11 +656,13 @@ class WikiForms(IBugtracker):
                 status = strip_tags(l[l.find('<dd>')+4:])
             if '<dt>category</dt>' in l2:
                 package = strip_tags(l[l.find('<dd>')+4:])
-        return (package, title, severity, status, "%s/%05d" % (self.url, id))
+        return [(id, package, title, severity, status, '', "%s/%05d" % (self.url, id))]
 
 sfre = re.compile(r"""
                   .*?
                   <h2>\[.*?\]\s*(?P<title>.*?)</h2>
+                  .*?
+                  Assigned To.*?<br>\s+(?P<assignee>\S+)
                   .*?
                   Priority.*?(?P<priority>\d+)
                   .*?
@@ -669,7 +687,7 @@ class Sourceforge(IBugtracker):
             resolution = reo.group('resolution')
             if not (resolution.lower() == 'none'):
                 status += ' ' + resolution
-            return (None, reo.group('title'), "Pri: %s" % reo.group('priority'), status, self._sf_url % id)
+            return [(id, None, reo.group('title'), "Pri: %s" % reo.group('priority'), status, reo.group('assignee'),self._sf_url % id)]
         except:
             raise BugtrackerError, "Bug not found"
 

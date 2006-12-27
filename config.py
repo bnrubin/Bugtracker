@@ -46,3 +46,7 @@ conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'bugtrackers',
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'replyWhenNotFound',
     registry.Boolean(False, """Whether to send a message when a bug could not be
     found"""))
+conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'repeatdelay',
+    registry.Integer(60, """Number of seconds to wait between repeated bug calls"""))
+conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'showassignee',
+    registry.Boolean(False, """Whether to show th assignee in bug reports"""))
