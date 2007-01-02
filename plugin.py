@@ -533,7 +533,7 @@ class Malone(IBugtracker):
         if bugdata['duplicate-of']:
             dupbug = self.get_bug(int(bugdata['duplicate-of']))
             return [(id, t, bugdata['title'] + (' (dup-of: %d)' % dupbug[0][0]), taskdata['importance'], 
-                    taskdata['status'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))] + dupbug
+                    taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))] + dupbug
         return [(id, t, bugdata['title'], taskdata['importance'], 
                 taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))]
             
