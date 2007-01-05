@@ -500,7 +500,7 @@ class Malone(IBugtracker):
         return 0
     def get_bug(self, id):
         try:
-            bugdata = utils.web.getUrl("%s/%d/+text" % (self.url,id))
+            bugdata = utils.web.getUrl("%s/%d/+text" % (self.url.replace('malone','bugs'),id))
         except Exception, e:
             if '404' in str(e):
                 s = 'Error getting %s bug #%s: Bug does not exist' % (self.description, id)
@@ -710,7 +710,7 @@ registerBugtracker('freedesktop2', 'http://bugs.freedesktop.org', 'Freedesktop',
 # Given that there is only one, let's add it by default
 registerBugtracker('openoffice', 'http://openoffice.org/issues', 'OpenOffice.org', 'issuezilla')
 # Given that there is only one, let's add it by default
-registerBugtracker('malone', 'http://launchpad.net/malone', 'Malone', 'malone')
+registerBugtracker('malone', 'https://launchpad.net/malone', 'Malone', 'malone')
 # Given that there is only one, let's add it by default
 registerBugtracker('debian', 'http://bugs.debian.org', 'Debian', 'debbugs')
 # Let's add a few bugtrackers by default
