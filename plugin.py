@@ -121,7 +121,6 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def reportnewbugs(self,irc):
         # Compile list of bugs
-        print "Reporting new bugs"
         tracker = self.db['malone']
         bugs = {}
         sc = imaplib.IMAP4_SSL(imap_server)
@@ -129,13 +128,10 @@ class Bugtracker(callbacks.PluginRegexp):
         sc.select('INBOX')
         new_mail = sc.search(None, '(UNSEEN)')[1][0].split()[:20]
         for m in new_mail:
-            print "Loading %s" % m
             msg = sc.fetch(m, 'RFC822')[1][0][1]
-            #print msg
             fp = email.FeedParser.FeedParser()
             fp.feed(msg)
             bug = fp.close()
-            #print "Mail parsed"
             # Determine bug number, component and tag
             try:
                 id = int(bug['Reply-To'].split()[1])
@@ -151,15 +147,12 @@ class Bugtracker(callbacks.PluginRegexp):
                 component = ''
             if tag not in bugs:
                 bugs[tag] = {}
-            #print "Data extracted"
             if id not in bugs[tag]:
                 try:
                     os.makedirs(os.path.join(bugreporter_base,tag,str(int(id/1000))))
                 except:
                     pass
-                print os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id))
                 if id > 58184 and not os.path.exists(os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id))):
-                    print "New bug: %d" % id
                     fd2 = open(os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id)),'w')
                     fd2.close()
                     try:
@@ -168,15 +161,13 @@ class Bugtracker(callbacks.PluginRegexp):
                         else:
                             bugs[tag][id] = self.get_bug(tracker, id, False)[0]
                     except:
-                        print "Cannot get bug %d" % id
+                        pass
         for c in irc.state.channels:
             tag = self.registryValue('bugReporter', channel=c)
             if not tag:
                 continue
             if tag not in bugs.keys():
-                print "No new bugs in %s" % tag
                 continue
-            print "New bugs in %s (%s): %s" % (c, tag, str(bugs[tag].keys()))
             for b in sorted(bugs[tag].keys()):
                 irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[tag][b][bugs[tag][b].find('bug ')+4:]))
 
@@ -316,8 +307,6 @@ class Bugtracker(callbacks.PluginRegexp):
                     for r in report:
                         irc.reply(r, prefixNick=False)
 
-    #show_bug.cgi?id=|bugreport.cgi?bug=|(bugs|+bug)/|ticket/|tracker/.*aid=
-    #&group_id=\d+&at_id=\d+
     def turlSnarfer(self, irc, msg, match):
         "(?P<tracker>https?://.*?)(show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|/ticket/|tracker/.*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
@@ -371,7 +360,6 @@ class Bugtracker(callbacks.PluginRegexp):
     def get_bug(self, tracker, id, do_assignee, do_url = True):
         reports = []
         for r in tracker.get_bug(id):
-            print r
             (bid, product, title, severity, status, assignee, url) = r
             severity = severity[0].upper() + severity[1:].lower()
             status = status[0].upper() + status[1:].lower()

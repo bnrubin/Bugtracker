@@ -25,6 +25,7 @@ Bugtracker dialects (types) this plugin understands:
 * Debbugs (debbugs sucks donkeyballs - please fix debbugs)
 * Trac (with not-too-buggered-up templates, it needs to do screenscraping)
 * Sourceforge (needs atid and group_id in the url!)
+* WikiForms (see bugs.gnewsense.org for an example)
 
 To request a bug report, use this syntax:
 
