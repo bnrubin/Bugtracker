@@ -1,5 +1,5 @@
 ###
-# Copyright (c) 2005,2006 Dennis Kaarsemaker
+# Copyright (c) 2005-2007 Dennis Kaarsemaker
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -19,7 +19,6 @@ import supybot.ircutils as ircutils
 def configure(advanced):
     from supybot.questions import expect, anything, something, yn
     conf.registerPlugin('Bugtracker', True)
-
 
 Bugtracker = conf.registerPlugin('Bugtracker')
 
@@ -50,3 +49,15 @@ conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'repeatdelay',
     registry.Integer(60, """Number of seconds to wait between repeated bug calls"""))
 conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'showassignee',
     registry.Boolean(False, """Whether to show th assignee in bug reports"""))
+    
+conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'reportercache',
+    registry.String('', """Name of the basedir for the bugreporter cache"""))
+conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_server',
+    registry.String('', """IMAP server for bugmail account""",private=True))
+conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_user',
+    registry.String('', """IMAP user for bugmail account""", private=True))
+conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_password',
+    registry.String('', """IMAP password for bugmail account""", private=True))
+conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_ssl',
+    registry.Boolean(False, """Use SSL for imap connections"""))
+

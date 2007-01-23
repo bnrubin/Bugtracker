@@ -1,4 +1,4 @@
-Copyright (c) 2005-2006, Dennis Kaarsemaker
+Copyright (c) 2005-2007, Dennis Kaarsemaker
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of version 2 of the GNU General Public License as
@@ -34,3 +34,40 @@ bug #123
 supybot bug 123
 bug 123, 4, 5
 bug 1, 3 and 89
+
+To rename a bugtracker:
+@bugtracker rename old-name new-name
+
+To change details of a bugtracker, just add it again and it will overwrite the
+existing tracker.
+
+The bug snarfing (responding to bug numbers/urls) will only work in channels
+where supybot.plugins.bugtracker.bugsnarfer is True.
+
+Automatic reporting of new bugs is also possible for Malone (the launchpad
+bugtracker). Enabling this is not a trivial process. First step is to set the
+supybot.plugins.bugtracker.reportercache variable to a dir for this purpose. You
+also need a mail account that supports the + hack (mail for foo+bar@baz.com is
+automatically delivered to foo@baz.com while the Delivered-To: header is set to
+foo+bar@baz.com) which is accessible via IMAP. I know this is a rather strong
+requirement, but that's the way it works now. Patches to make it work in other
+situations are appreciated.
+
+Anyway, once that is all set up you're almost there. Let's assume the
+mailaddress is bugreporter@yourdomain.com. Now pick a tag for your bugreports,
+e.g. ubuntu (you can set a different tag per channel) and create a launchpad
+account with address bugreporter+ubuntu@yourdomain.com. Activate that account
+and make sure it gets bugmail for the product(s) you want to monitor.
+
+Now set the supybot.plugins.bugtracker.bugreporter in the channels where bugs
+are to be reported to the value of the tag for bugs to be reported there and
+watch bugs flowing in.
+
+To prevent old bugs from showing up when they change or a comment is being
+added, you can manually fill the cache. Just touch files in the reporters cache
+with the following name:
+
+tag_here/malone/NN/MMMM where NN is int(bugid/1000) and MMMM is the bugid.
+
+If your products already have many bugreports, consider doing some
+screenscraping with the malone searchpages and sed/awk :)

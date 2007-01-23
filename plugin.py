@@ -1,5 +1,5 @@
 ###
-# Copyright (c) 2005,2006 Dennis Kaarsemaker
+# Copyright (c) 2005-2007 Dennis Kaarsemaker
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -12,9 +12,8 @@
 #
 ###
 
-import supybot.utils as utils
 from supybot.commands import *
-import supybot.plugins as plugins
+import supybot.utils as utils
 import supybot.ircmsgs as ircmsgs
 import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
@@ -26,11 +25,6 @@ import re, os, time, imaplib, commands
 import xml.dom.minidom as minidom
 from htmlentitydefs import entitydefs as entities
 import email.FeedParser
-
-bugreporter_base = '/home/dennis/ubugtu/data/bugmail'
-imap_server = 'localhost'
-imap_user = commands.getoutput('cat /home/dennis/ubugtu/imap_user')
-imap_password = commands.getoutput('cat /home/dennis/ubugtu/imap_password')
 
 def registerBugtracker(name, url='', description='', trackertype=''):
     conf.supybot.plugins.Bugtracker.bugtrackers().add(name)
@@ -95,13 +89,15 @@ class Bugtracker(callbacks.PluginRegexp):
             else:
                 raise BugtrackerError("Unknown trackertype: %s" % group.trackertype())
         self.shorthand = utils.abbrev(self.db.keys())
-        try:
-            schedule.removeEvent(self.name())
-        except:
-            pass
-        schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name())
+
+        # Schedule bug reporting
+        if self.registryValue('imap_server') and self.registryValue('reportercache'):
+            try:
+                schedule.removeEvent(self.name() + '.bugreporter')
+            except:
+                pass
+            schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name() + '.bugreporter')
         self.shown = {}
-        self.nomailtime = 0
 
     def die(self):
         try:
@@ -119,49 +115,68 @@ class Bugtracker(callbacks.PluginRegexp):
             return True
         return False
 
+    def is_new(self, tracker, tag, id):
+        bugreporter_base = self.registryValue('reportercache')
+        if not os.path.exists(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000)),str(id))):
+            try:
+                os.makedirs(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000))))
+            except:
+                pass
+            fd = open(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000)),str(id)),'w')
+            fd.close()
+            return True
+        return False
+
     def reportnewbugs(self,irc):
         # Compile list of bugs
-        tracker = self.db['malone']
+        self.log.info("Checking for new bugs")
         bugs = {}
-        sc = imaplib.IMAP4_SSL(imap_server)
-        sc.login(imap_user, imap_password)
+        if self.registryValue('imap_ssl'):
+            sc = imaplib.IMAP4_SSL(self.registryValue('imap_server'))
+        else:
+            sc = imaplib.IMAP4(self.registryValue('imap_server'))
+        sc.login(self.registryValue('imap_user'), self.registryValue('imap_password'))
         sc.select('INBOX')
         new_mail = sc.search(None, '(UNSEEN)')[1][0].split()[:20]
+
+        # Read all new mail
         for m in new_mail:
             msg = sc.fetch(m, 'RFC822')[1][0][1]
             fp = email.FeedParser.FeedParser()
             fp.feed(msg)
             bug = fp.close()
-            # Determine bug number, component and tag
-            try:
-                id = int(bug['Reply-To'].split()[1])
-            except:
-                continue
+            
             tag = bug['Delivered-To']
+            if '+' not in tag:
+                self.log.info('Ignoring e-mail with no detectable bug')
+                continue
+                
             tag = tag[tag.find('+')+1:tag.find('@')]
-            component = bug['X-Launchpad-Bug']
-            if 'component' in component:
-                component = component[component.find('component=')+10:]
-                component = component[:component.find(';')].replace('None','')
-            else:
-                component = ''
             if tag not in bugs:
                 bugs[tag] = {}
-            if id not in bugs[tag]:
-                try:
-                    os.makedirs(os.path.join(bugreporter_base,tag,str(int(id/1000))))
-                except:
-                    pass
-                if id > 58184 and not os.path.exists(os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id))):
-                    fd2 = open(os.path.join(bugreporter_base,tag,str(int(id/1000)),str(id)),'w')
-                    fd2.close()
+
+            # Determine bugtracker type (currently only Malone is supported anyway)
+            if bug['X-Launchpad-Bug']:
+                tracker = self.db['malone']
+                id = int(bug['Reply-To'].split()[1])
+                if self.is_new(tracker, tag, id):
+                    component = bug['X-Launchpad-Bug']
+                    if 'component' in component:
+                        component = component[component.find('component=')+10:]
+                        component = component[:component.find(';')].replace('None','')
+                    else:
+                        component = ''
                     try:
                         if component:
                             bugs[tag][id] = self.get_bug(tracker, id, False)[0].replace('"','(%s) "' % component, 1)
                         else:
                             bugs[tag][id] = self.get_bug(tracker, id, False)[0]
                     except:
+                        self.log.info("Unable to get new bug %d" % id)
                         pass
+            else:
+                self.log.info('Ignoring e-mail with no detectable bug')
+                
         for c in irc.state.channels:
             tag = self.registryValue('bugReporter', channel=c)
             if not tag:
@@ -215,6 +230,25 @@ class Bugtracker(callbacks.PluginRegexp):
             irc.error(s % name)
     remove = wrap(remove, ['text'])
 
+    def rename(self, irc, msg, args, oldname, newname):
+        """<oldname> <newname>
+
+        Rename the bugtracker associated with <oldname> to <newname>
+        """
+        try:
+            name = self.shorthand[oldname.lower()]
+            group = self.registryValue('bugtrackers.%s' % name.replace('.','\\.'), value=False)
+            self.db[newname] = defined_bugtrackers[trackertype](name,group.url(),group.description())
+            registerBugtracker(newname, group.url(), group.description(), group.trackertype())
+            del self.db[name]
+            self.registryValue('bugtrackers').remove(name)
+            self.shorthand = utils.abbrev(self.db.keys())
+            irc.replySuccess()
+        except KeyError:
+            s = self.registryValue('replyNoBugtracker', msg.args[0])
+            irc.error(s % name)
+    rename = wrap(rename, ['something','something'])
+
     def list(self, irc,  msg, args, name):
         """[abbreviation]
 
@@ -244,16 +278,13 @@ class Bugtracker(callbacks.PluginRegexp):
         r"""\b(?P<bt>(([a-z]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
+
         # Don't double on commands
         s = str(msg).split(':')[2]
         if s[0] in str(conf.supybot.reply.whenAddressedBy.chars):
             return
         sure_bug = match.group('bt').endswith('bug') or match.group('bt').endswith('bug')
-        # FIXME dig into supybot docs/code
-        #if conf.supybot.reply.whenAddressedBy.strings:
-        #    for p in conf.supybot.reply.whenAddressedBy.strings:
-        #        if s.startswith(str(p)):
-        #            return
+        
         # Get tracker name
         bugids = match.group('bug')
         reps = ((' ',''),('#',''),('and',','),('en',','),('et',','),('und',','),('ir',','))
@@ -491,8 +522,7 @@ class Malone(IBugtracker):
             bugdata = utils.web.getUrl("%s/%d/+text" % (self.url.replace('malone','bugs'),id))
         except Exception, e:
             if '404' in str(e):
-                s = 'Error getting %s bug #%s: Bug does not exist' % (self.description, id)
-                raise BugtrackerError, s
+                raise BugNotFoundError
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
         summary = {}
@@ -586,7 +616,7 @@ class Debbugs(IBugtracker):
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
         if '<p>There is no record of Bug' in bugdata:
-            raise BugtrackerError, "%s bug %d does not exist" % (self.description, id)
+            raise BugNotFoundError
         try:
             data = {'package': 'unknown','title': 'unknown','severity':'unknown','status':'Open'}
             for m in bugdata.split("\n\n\nFrom"):
@@ -659,7 +689,6 @@ sfre = re.compile(r"""
                   Resolution.*?<br>\s+(?P<resolution>\S+)
                   .*?
                   """, re.VERBOSE | re.DOTALL | re.I)
-
 class Sourceforge(IBugtracker):
     _sf_url = 'http://sf.net/support/tracker.php?aid=%d'
     def get_bug(self, id):
@@ -677,7 +706,7 @@ class Sourceforge(IBugtracker):
                 status += ' ' + resolution
             return [(id, None, reo.group('title'), "Pri: %s" % reo.group('priority'), status, reo.group('assignee'),self._sf_url % id)]
         except:
-            raise BugtrackerError, "Bug not found"
+            raise BugNotFoundError
 
 # Introspection is quite cool
 defined_bugtrackers = {}
