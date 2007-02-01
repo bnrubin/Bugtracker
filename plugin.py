@@ -230,7 +230,7 @@ class Bugtracker(callbacks.PluginRegexp):
             irc.error(s % name)
     remove = wrap(remove, ['text'])
 
-    def rename(self, irc, msg, args, oldname, newname):
+    def rename(self, irc, msg, args, oldname, newname, newdesc):
         """<oldname> <newname>
 
         Rename the bugtracker associated with <oldname> to <newname>
@@ -238,8 +238,11 @@ class Bugtracker(callbacks.PluginRegexp):
         try:
             name = self.shorthand[oldname.lower()]
             group = self.registryValue('bugtrackers.%s' % name.replace('.','\\.'), value=False)
-            self.db[newname] = defined_bugtrackers[trackertype](name,group.url(),group.description())
-            registerBugtracker(newname, group.url(), group.description(), group.trackertype())
+            d = group.description()
+            if newdesc:
+                d = newdesc
+            self.db[newname] = defined_bugtrackers[group.trackertype()](name,group.url(),d)
+            registerBugtracker(newname, group.url(), d, group.trackertype())
             del self.db[name]
             self.registryValue('bugtrackers').remove(name)
             self.shorthand = utils.abbrev(self.db.keys())
@@ -247,7 +250,7 @@ class Bugtracker(callbacks.PluginRegexp):
         except KeyError:
             s = self.registryValue('replyNoBugtracker', msg.args[0])
             irc.error(s % name)
-    rename = wrap(rename, ['something','something'])
+    rename = wrap(rename, ['something','something', additional('text')])
 
     def list(self, irc,  msg, args, name):
         """[abbreviation]
@@ -275,7 +278,7 @@ class Bugtracker(callbacks.PluginRegexp):
     list = wrap(list, [additional('text')])
 
     def bugSnarfer(self, irc, msg, match):
-        r"""\b(?P<bt>(([a-z]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
+        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
 
@@ -327,6 +330,8 @@ class Bugtracker(callbacks.PluginRegexp):
                     continue
                 try:
                     report = self.get_bug(tracker,bugid,self.registryValue('showassignee', msg.args[0]))
+                except BugNotFoundError:
+                    irc.error("%s bug %d could not be found" % (tracker.description, bugid))
                 except BugtrackerError, e:
                     if 'private' in str(e):
                         irc.reply("Bug %d on http://launchpad.net/bugs/%d is private" % (bugid, bugid))
@@ -339,7 +344,7 @@ class Bugtracker(callbacks.PluginRegexp):
                         irc.reply(r, prefixNick=False)
 
     def turlSnarfer(self, irc, msg, match):
-        "(?P<tracker>https?://.*?)(show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|/ticket/|tracker/.*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
+        r"(?P<tracker>https?://\S*?)(show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|/ticket/|tracker/\S*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
         try:
@@ -447,6 +452,8 @@ class Bugzilla(IBugtracker):
         bug_n = zilladom.getElementsByTagName('bug')[0]
         if bug_n.hasAttribute('error'):
             errtxt = bug_n.getAttribute('error')
+            if errtxt == 'NotFound':
+                raise BugNotFoundError
             s = 'Error getting %s bug #%s: %s' % (self.description, id, errtxt)
             raise BugtrackerError, s
         try:
@@ -458,7 +465,11 @@ class Bugzilla(IBugtracker):
                 pass
             component = _getnodetxt(bug_n.getElementsByTagName('component')[0])
             severity = _getnodetxt(bug_n.getElementsByTagName('bug_severity')[0])
-            assignee = _getnodetxt(bug_n.getElementsByTagName('assigned_to')[0])
+            assignee = '(unavailable)'
+            try:
+                assignee = _getnodetxt(bug_n.getElementsByTagName('assigned_to')[0])
+            except:
+                pass
         except Exception, e:
             s = 'Could not parse XML returned by %s bugzilla: %s' % (self.description, e)
             raise BugtrackerError, s
@@ -475,6 +486,8 @@ class Issuezilla(IBugtracker):
             raise BugtrackerError, s
         bug_n = zilladom.getElementsByTagName('issue')[0]
         if not (bug_n.getAttribute('status_code') == '200'):
+            if bug_n.getAttribute('status_message') == 'NotFound':
+                raise BugNotFoundError
             s = 'Error getting %s bug #%s: %s' % (self.description, id, bug_n.getAttribute('status_message'))
             raise BugtrackerError, s
         try:
@@ -634,21 +647,25 @@ class Trac(IBugtracker):
         try:
             bugdata = utils.web.getUrl(url)
         except Exception, e:
+            # Hacketiehack
+            if 'HTTP Error 500' in str(e):
+                raise BugNotFoundError
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
         for l in bugdata.split("\n"):
-            if '<h1>Ticket' in l:
-                severity = l[l.find('(')+1:l.find(')')]
             if 'class="summary"' in l:
                 title = l[l.find('>')+1:l.find('</')]
             if 'class="status"' in l:
-                status = l[l.find('<strong>')+8:l.find('</strong>')]
+                status = l[l.find('>(')+2:l.find(')')]
             if 'headers="h_component"' in l:
                 package = l[l.find('>')+1:l.find('</')]
             if 'headers="h_severity"' in l:
                 severity = l[l.find('>')+1:l.find('</')]
+            if 'headers="h_stage"' in l:
+                severity = l[l.find('>')+1:l.find('</')]
             if 'headers="h_owner"' in l:
                 assignee = l[l.find('>')+1:l.find('</')]
+        print [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
         return [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
         
 class WikiForms(IBugtracker):
@@ -662,6 +679,8 @@ class WikiForms(IBugtracker):
         try:
             bugdata = utils.web.getUrl(url)
         except Exception, e:
+            if 'HTTP Error 404' in str(e):
+                raise BugNotFoundError
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
         for l in bugdata.split("\n"):
@@ -675,6 +694,35 @@ class WikiForms(IBugtracker):
             if '<dt>category</dt>' in l2:
                 package = strip_tags(l[l.find('<dd>')+4:])
         return [(id, package, title, severity, status, '', "%s/%05d" % (self.url, id))]
+
+class Str(IBugtracker):
+    def get_bug(self, id):
+        def strip_tags(s):
+            while '<' in s and '>' in s:
+                s = str(s[:s.find('<')]) + str(s[s.find('>')+1:])
+            return s
+        url = "%s?L%d" % (self.url, id)
+        try:
+            bugdata = utils.web.getUrl(url)
+        except Exception, e:
+            s = 'Could not parse data returned by %s: %s' % (self.description, e)
+            raise BugtrackerError, s
+        for l in bugdata.split("\n"):
+            l2 = l.lower()
+            if 'nowrap>priority:</th>' in l2:
+                severity = 'Priority ' + l[l.find(' - ')+3:min(l.find(','),l.find('</td>'))]
+            if '>application:</th>' in l2:
+                package = l[l.find('<td>')+4:l.find('</td>')]
+            if 'nowrap>status:</th>' in l2:
+                status = l[l.find(' - ')+3:l.find('</td>')]
+            if 'nowrap>summary:</th>' in l2:
+                title = l[l.find('<td>')+4:l.find('</td>')]
+            if 'nowrap>assigned to:</th>' in l2:
+                assignee = strip_tags(l[l.find('<td>')+4:l.find('</td>')])
+                if assignee == 'Unassigned':
+                    assignee = 'nobody'
+        return [(id, package, title, severity, status, assignee, "%s/L%d" % (self.url, id))]
+        
 
 sfre = re.compile(r"""
                   .*?
@@ -715,7 +763,6 @@ for k in v.keys():
     if type(v[k]) == type(IBugtracker) and issubclass(v[k], IBugtracker) and not (v[k] == IBugtracker):
         defined_bugtrackers[k.lower()] = v[k]
 
-# Let's add a few bugtrackers by default
 registerBugtracker('mozilla', 'http://bugzilla.mozilla.org', 'Mozilla', 'bugzilla')
 registerBugtracker('ubuntu', 'http://bugzilla.ubuntu.com', 'Ubuntu', 'bugzilla')
 registerBugtracker('gnome', 'http://bugzilla.gnome.org', 'Gnome', 'bugzilla')
@@ -724,18 +771,14 @@ registerBugtracker('kde', 'http://bugs.kde.org', 'KDE', 'bugzilla')
 registerBugtracker('ximian', 'http://bugzilla.ximian.com', 'Ximian', 'bugzilla')
 registerBugtracker('freedesktop', 'http://bugzilla.freedesktop.org', 'Freedesktop', 'bugzilla')
 registerBugtracker('freedesktop2', 'http://bugs.freedesktop.org', 'Freedesktop', 'bugzilla')
-# Given that there is only one, let's add it by default
 registerBugtracker('openoffice', 'http://openoffice.org/issues', 'OpenOffice.org', 'issuezilla')
-# Given that there is only one, let's add it by default
 registerBugtracker('malone', 'https://launchpad.net/malone', 'Malone', 'malone')
-# Given that there is only one, let's add it by default
 registerBugtracker('debian', 'http://bugs.debian.org', 'Debian', 'debbugs')
-# Let's add a few bugtrackers by default
 registerBugtracker('trac', 'http://projects.edgewall.com/trac/ticket', 'Trac', 'trac')
 registerBugtracker('django', 'http://code.djangoproject.com/ticket', 'Django', 'trac')
-# Let's add a few bugtrackers by default
+registerBugtracker('cups', 'http://www.cups.org/str.php', 'CUPS', 'str')
+registerBugtracker('gnewsense', 'http://bugs.gnewsense.org/Bugs', 'gNewSense', 'wikiforms')
 registerBugtracker('supybot', 'http://sourceforge.net/tracker/?group_id=58965&atid=489447', 'Supybot', 'sourceforge')
-# Special one, do NOT disable/delete
+# Don't delete this one
 registerBugtracker('sourceforge', 'http://sourceforge.net/tracker/', 'Sourceforge', 'sourceforge')
-
 Class = Bugtracker

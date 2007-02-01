@@ -26,6 +26,7 @@ Bugtracker dialects (types) this plugin understands:
 * Trac (with not-too-buggered-up templates, it needs to do screenscraping)
 * Sourceforge (needs atid and group_id in the url!)
 * WikiForms (see bugs.gnewsense.org for an example)
+* str.php from the CUPS project
 
 To request a bug report, use this syntax:
 
@@ -71,3 +72,19 @@ tag_here/malone/NN/MMMM where NN is int(bugid/1000) and MMMM is the bugid.
 
 If your products already have many bugreports, consider doing some
 screenscraping with the malone searchpages and sed/awk :)
+
+A quick hack I use to get all launchpad bugids preseeded:
+
+cd /home/ubugtu/data/bugmail # This is my cachedir
+cd launchpad                 # This is the tag
+mkdir malone
+product=launchpad
+amount=2000                  # 2000 is the amount of bugs, chck this on
+                             # launchpad under all bugs ever reported
+# Download a summary of all bugs
+for x in `seq 0 75 $amount`; do
+    wget "https://bugs.launchpad.net/$product/+bugs?search=Search&field.status=Unconfirmed&field.status=Confirmed&field.status=In+Progress&field.status=Needs+Info&field.status=Fix+Committed&field.status=Fix+Released&field.status=Rejected&field.omit_dupes.used=&start=$x" -O $x;
+done
+ grep -h =.amount * | sed -e 's/.*>\(.*\)<.*/\1/' | awk '{print "malone/" int($1/1000)}' | sort -u | xargs mkdir -p
+ grep -h =.amount * | sed -e 's/.*>\(.*\)<.*/\1/' | awk '{print "malone/" int($1/1000) "/" $1}' | xargs -n100 touch
+ 
