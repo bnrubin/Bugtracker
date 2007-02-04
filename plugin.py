@@ -281,6 +281,10 @@ class Bugtracker(callbacks.PluginRegexp):
         r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
+        nbugs = msg.tagged('nbugs')
+        if not nbugs: nbugs = 0
+        if nbugs >= 5:
+            return
 
         # Don't double on commands
         s = str(msg).split(':')[2]
@@ -293,7 +297,8 @@ class Bugtracker(callbacks.PluginRegexp):
         reps = ((' ',''),('#',''),('and',','),('en',','),('et',','),('und',','),('ir',','))
         for r in reps:
             bugids = bugids.replace(r[0],r[1])
-        bugids = bugids.split(',')[:5]
+        bugids = bugids.split(',')[:5-nbugs]
+        msg.tag('nbugs', nbugs + len(bugids))
         bt = map(lambda x: x.lower(), match.group('bt').split())
         name = ''
         if len(bt) == 1 and not (bt[0] in ['bug','bugs']):
@@ -331,7 +336,8 @@ class Bugtracker(callbacks.PluginRegexp):
                 try:
                     report = self.get_bug(tracker,bugid,self.registryValue('showassignee', msg.args[0]))
                 except BugNotFoundError:
-                    irc.error("%s bug %d could not be found" % (tracker.description, bugid))
+                    if self.registryValue('replyWhenNotFound'):
+                        irc.error("%s bug %d could not be found" % (tracker.description, bugid))
                 except BugtrackerError, e:
                     if 'private' in str(e):
                         irc.reply("Bug %d on http://launchpad.net/bugs/%d is private" % (bugid, bugid))
@@ -344,9 +350,15 @@ class Bugtracker(callbacks.PluginRegexp):
                         irc.reply(r, prefixNick=False)
 
     def turlSnarfer(self, irc, msg, match):
-        r"(?P<tracker>https?://\S*?)(show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|/ticket/|tracker/\S*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
+        r"(?P<tracker>https?://\S*?)/(Bugs/0*|str.php\?L|show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|ticket/|tracker/|\S*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
+        print match
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
+        nbugs = msg.tagged('nbugs')
+        if not nbugs: nbugs = 0
+        if nbugs >= 5:
+            return
+        msg.tag('nbugs', nbugs+1)
         try:
             tracker = self.get_tracker(match.group(0),match.group('sfurl'))
             if not tracker:
@@ -665,7 +677,7 @@ class Trac(IBugtracker):
                 severity = l[l.find('>')+1:l.find('</')]
             if 'headers="h_owner"' in l:
                 assignee = l[l.find('>')+1:l.find('</')]
-        print [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
+        #print [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
         return [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
         
 class WikiForms(IBugtracker):
@@ -728,24 +740,26 @@ sfre = re.compile(r"""
                   .*?
                   <h2>\[.*?\]\s*(?P<title>.*?)</h2>
                   .*?
-                  Assigned To.*?<br>\s+(?P<assignee>\S+)
+                  assigned.*?<br>\s+(?P<assignee>\S+)
                   .*?
-                  Priority.*?(?P<priority>\d+)
+                  priority.*?(?P<priority>\d+)
                   .*?
-                  Status.*?<br>\s+(?P<status>\S+)
+                  status.*?<br>\s+(?P<status>\S+)
                   .*?
-                  Resolution.*?<br>\s+(?P<resolution>\S+)
+                  resolution.*?<br>\s+(?P<resolution>\S+)
                   .*?
                   """, re.VERBOSE | re.DOTALL | re.I)
 class Sourceforge(IBugtracker):
     _sf_url = 'http://sf.net/support/tracker.php?aid=%d'
     def get_bug(self, id):
         url = self._sf_url % id
+        print url
         try:
             bugdata = utils.web.getUrl(url)
         except Exception, e:
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
+        print bugdata
         try:
             reo = sfre.search(bugdata)
             status = reo.group('status')
@@ -754,6 +768,7 @@ class Sourceforge(IBugtracker):
                 status += ' ' + resolution
             return [(id, None, reo.group('title'), "Pri: %s" % reo.group('priority'), status, reo.group('assignee'),self._sf_url % id)]
         except:
+            raise
             raise BugNotFoundError
 
 # Introspection is quite cool
@@ -774,7 +789,7 @@ registerBugtracker('freedesktop2', 'http://bugs.freedesktop.org', 'Freedesktop',
 registerBugtracker('openoffice', 'http://openoffice.org/issues', 'OpenOffice.org', 'issuezilla')
 registerBugtracker('malone', 'https://launchpad.net/malone', 'Malone', 'malone')
 registerBugtracker('debian', 'http://bugs.debian.org', 'Debian', 'debbugs')
-registerBugtracker('trac', 'http://projects.edgewall.com/trac/ticket', 'Trac', 'trac')
+registerBugtracker('trac', 'http://trac.edgewall.org/ticket', 'Trac', 'trac')
 registerBugtracker('django', 'http://code.djangoproject.com/ticket', 'Django', 'trac')
 registerBugtracker('cups', 'http://www.cups.org/str.php', 'CUPS', 'str')
 registerBugtracker('gnewsense', 'http://bugs.gnewsense.org/Bugs', 'gNewSense', 'wikiforms')
