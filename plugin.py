@@ -721,7 +721,7 @@ class Str(IBugtracker):
                 assignee = strip_tags(l[l.find('<td>')+4:l.find('</td>')])
                 if assignee == 'Unassigned':
                     assignee = 'nobody'
-        return [(id, package, title, severity, status, assignee, "%s/L%d" % (self.url, id))]
+        return [(id, package, title, severity, status, assignee, "%s?L%d" % (self.url, id))]
         
 
 sfre = re.compile(r"""
