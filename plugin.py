@@ -351,7 +351,6 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def turlSnarfer(self, irc, msg, match):
         r"(?P<tracker>https?://\S*?)/(Bugs/0*|str.php\?L|show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|ticket/|tracker/|\S*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
-        print match
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
         nbugs = msg.tagged('nbugs')
@@ -380,6 +379,7 @@ class Bugtracker(callbacks.PluginRegexp):
         irc.reply("https://devpad.canonical.com/~jamesh/oops.cgi/%s" % oopsid, prefixNick=False)
 
     def get_tracker(self,snarfurl,sfdata):
+        snarfurl = snarfurl.replace('sf.net','sourceforge.net')
         snarfhost = snarfurl.replace('http://','').replace('https://','')
         if '/' in snarfurl:
             snarfhost = snarfhost[:snarfhost.index('/')]
@@ -527,10 +527,10 @@ class Malone(IBugtracker):
         try:
             statuses   = ['Rejected', 'Fix Released', 'Fix Committed', 'Unconfirmed', 'Needs Info', 'In Progress', 'Confirmed']
             severities = ['Undecided', 'Wishlist', 'Minor', 'Low', 'Normal', 'Medium', 'Major', 'High', 'Critical']
-            if task1['status'] not in statuses and task2['status'] in statuses: return 1
-            if task1['status'] in statuses and task2['status'] not in statuses: return -1
-            if task1['importance'] not in severities and task2['importance'] in severities: return 1
-            if task1['importance'] in severities and task2['importance'] not in severities: return -1
+            if task1['status'] not in statuses and task2['status'] in statuses: return -1
+            if task1['status'] in statuses and task2['status'] not in statuses: return 1
+            if task1['importance'] not in severities and task2['importance'] in severities: return -1
+            if task1['importance'] in severities and task2['importance'] not in severities: return 1
             if not (task1['status'] == task2['status']):
                 if statuses.index(task1['status']) < statuses.index(task2['status']):
                     return -1
@@ -677,7 +677,6 @@ class Trac(IBugtracker):
                 severity = l[l.find('>')+1:l.find('</')]
             if 'headers="h_owner"' in l:
                 assignee = l[l.find('>')+1:l.find('</')]
-        #print [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
         return [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
         
 class WikiForms(IBugtracker):
@@ -753,13 +752,11 @@ class Sourceforge(IBugtracker):
     _sf_url = 'http://sf.net/support/tracker.php?aid=%d'
     def get_bug(self, id):
         url = self._sf_url % id
-        print url
         try:
             bugdata = utils.web.getUrl(url)
         except Exception, e:
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
-        print bugdata
         try:
             reo = sfre.search(bugdata)
             status = reo.group('status')
