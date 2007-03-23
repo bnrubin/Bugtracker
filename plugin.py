@@ -168,9 +168,9 @@ class Bugtracker(callbacks.PluginRegexp):
                         component = ''
                     try:
                         if component:
-                            bugs[tag][id] = self.get_bug(tracker, id, False)[0].replace('"','(%s) "' % component, 1)
+                            bugs[tag][id] = self.get_bug('',tracker, id, False)[0].replace('"','(%s) "' % component, 1)
                         else:
-                            bugs[tag][id] = self.get_bug(tracker, id, False)[0]
+                            bugs[tag][id] = self.get_bug('',tracker, id, False)[0]
                     except:
                         self.log.info("Unable to get new bug %d" % id)
                         pass
@@ -278,7 +278,7 @@ class Bugtracker(callbacks.PluginRegexp):
     list = wrap(list, [additional('text')])
 
     def bugSnarfer(self, irc, msg, match):
-        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
+        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
         nbugs = msg.tagged('nbugs')
@@ -294,10 +294,13 @@ class Bugtracker(callbacks.PluginRegexp):
         
         # Get tracker name
         bugids = match.group('bug')
+        print bugids
         reps = ((' ',''),('#',''),('and',','),('en',','),('et',','),('und',','),('ir',','))
         for r in reps:
             bugids = bugids.replace(r[0],r[1])
         bugids = bugids.split(',')[:5-nbugs]
+        if not sure_bug:
+            bugids = [x for x in bugids if int(x) > 100]
         msg.tag('nbugs', nbugs + len(bugids))
         bt = map(lambda x: x.lower(), match.group('bt').split())
         name = ''
@@ -331,10 +334,8 @@ class Bugtracker(callbacks.PluginRegexp):
         else:
             for bugid in bugids:
                 bugid = int(bugid)
-                if not self.is_ok(msg.args[0],tracker, bugid):
-                    continue
                 try:
-                    report = self.get_bug(tracker,bugid,self.registryValue('showassignee', msg.args[0]))
+                    report = self.get_bug(msg.args[0],tracker,bugid,self.registryValue('showassignee', msg.args[0]))
                 except BugNotFoundError:
                     if self.registryValue('replyWhenNotFound'):
                         irc.error("%s bug %d could not be found" % (tracker.description, bugid))
@@ -362,9 +363,7 @@ class Bugtracker(callbacks.PluginRegexp):
             tracker = self.get_tracker(match.group(0),match.group('sfurl'))
             if not tracker:
                 return
-            if not self.is_ok(msg.args[0],tracker, int(match.group('bug'))):
-                return
-            report = self.get_bug(tracker,int(match.group('bug')),self.registryValue('showassignee', msg.args[0]), do_url = False)
+            report = self.get_bug(msg.args[0],tracker,int(match.group('bug')),self.registryValue('showassignee', msg.args[0]), do_url = False)
         except BugtrackerError, e:
             irc.error(str(e))
         else:
@@ -405,9 +404,11 @@ class Bugtracker(callbacks.PluginRegexp):
                 return tracker
         return None
 
-    def get_bug(self, tracker, id, do_assignee, do_url = True):
+    def get_bug(self, channel, tracker, id, do_assignee, do_url = True):
         reports = []
         for r in tracker.get_bug(id):
+            if not self.is_ok(channel, tracker, r[0]):
+                continue
             (bid, product, title, severity, status, assignee, url) = r
             severity = severity[0].upper() + severity[1:].lower()
             status = status[0].upper() + status[1:].lower()
