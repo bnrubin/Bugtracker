@@ -294,7 +294,6 @@ class Bugtracker(callbacks.PluginRegexp):
         
         # Get tracker name
         bugids = match.group('bug')
-        print bugids
         reps = ((' ',''),('#',''),('and',','),('en',','),('et',','),('und',','),('ir',','))
         for r in reps:
             bugids = bugids.replace(r[0],r[1])
