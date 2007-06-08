@@ -72,11 +72,12 @@ class BugNotFoundError(Exception):
     """Pity, bug isn't there"""
     pass
 
+cvere = re.compile(r'<td><font[^>]*>description</font></td>\s*<td><font[^>]*>(.*?)\s*</font>', re.I | re.DOTALL)
 class Bugtracker(callbacks.PluginRegexp):
     """Show a link to a bug report with a brief description"""
     threaded = True
     callBefore = ['URL']
-    regexps = ['turlSnarfer', 'bugSnarfer', 'oopsSnarfer']
+    regexps = ['turlSnarfer', 'bugSnarfer', 'oopsSnarfer', 'cveSnarfer']
 
     def __init__(self, irc):
         callbacks.PluginRegexp.__init__(self, irc)
@@ -155,9 +156,9 @@ class Bugtracker(callbacks.PluginRegexp):
             if tag not in bugs:
                 bugs[tag] = {}
 
-            # Determine bugtracker type (currently only Malone is supported anyway)
+            # Determine bugtracker type (currently only Launchpad is supported anyway)
             if bug['X-Launchpad-Bug']:
-                tracker = self.db['malone']
+                tracker = self.db['launchpad']
                 id = int(bug['Reply-To'].split()[1])
                 if self.is_new(tracker, tag, id):
                     component = bug['X-Launchpad-Bug']
@@ -171,6 +172,8 @@ class Bugtracker(callbacks.PluginRegexp):
                             bugs[tag][id] = self.get_bug('',tracker, id, False)[0].replace('"','(%s) "' % component, 1)
                         else:
                             bugs[tag][id] = self.get_bug('',tracker, id, False)[0]
+                        if '[apport]' in bugs[tag][id]:
+                            bugs[tag].pop(id)
                     except:
                         self.log.info("Unable to get new bug %d" % id)
                         pass
@@ -185,12 +188,13 @@ class Bugtracker(callbacks.PluginRegexp):
                 continue
             for b in sorted(bugs[tag].keys()):
                 irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[tag][b][bugs[tag][b].find('bug ')+4:]))
+        print "Reported!"
 
     def add(self, irc, msg, args, name, trackertype, url, description):
         """<name> <type> <url> [<description>]
 
         Add a bugtracker <url> to the list of defined bugtrackers. <type> is the
-        type of the tracker (currently only Malone, Debbugs, Bugzilla,
+        type of the tracker (currently only Launchpad, Debbugs, Bugzilla,
         Issuezilla and Trac are known). <name> is the name that will be used to
         reference the bugzilla in all commands. Unambiguous abbreviations of
         <name> will be accepted also.  <description> is the common name for the
@@ -373,8 +377,25 @@ class Bugtracker(callbacks.PluginRegexp):
     # Only useful for launchpad developers
     def oopsSnarfer(self, irc, msg, match):
         r"OOPS-(?P<oopsid>\d*[A-Z]\d+)"
+        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
+            return
         oopsid = match.group(1)
         irc.reply("https://devpad.canonical.com/~jamesh/oops.cgi/%s" % oopsid, prefixNick=False)
+
+    def cveSnarfer(self, irc, msg, match):
+        r"(cve[- ]\d{4}[- ]\d{4})"
+        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
+            return
+        cve = match.group(1).replace(' ','-').upper()
+        url = 'http://cve.mitre.org/cgi-bin/cvename.cgi?name=%s' % cve
+        cvedata = utils.web.getUrl(url)
+        m = cvere.search(cvedata)
+        if m:
+            cve = m.group(1).replace('\n', ' ')
+            irc.reply("%s (%s)" % (cve,url))
+
+    def cveUrlSnarfer(self, irc, msg, match):
+        pass
 
     def get_tracker(self,snarfurl,sfdata):
         snarfurl = snarfurl.replace('sf.net','sourceforge.net')
@@ -517,7 +538,7 @@ class Issuezilla(IBugtracker):
             raise BugtrackerError, s
         return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
 
-class Malone(IBugtracker):
+class Launchpad(IBugtracker):
     def _parse(self, task):
         parser = email.FeedParser.FeedParser()
         parser.feed(task)
@@ -525,7 +546,7 @@ class Malone(IBugtracker):
     def _sort(self, task1, task2):
         # Status sort: 
         try:
-            statuses   = ['Rejected', 'Fix Released', 'Fix Committed', 'Unconfirmed', 'Needs Info', 'In Progress', 'Confirmed']
+            statuses   = ['Rejected', 'Fix Released', 'Fix Committed', 'Unconfirmed','Needs Info','Confirmed','In Progress']
             severities = ['Undecided', 'Wishlist', 'Minor', 'Low', 'Normal', 'Medium', 'Major', 'High', 'Critical']
             if task1['status'] not in statuses and task2['status'] in statuses: return -1
             if task1['status'] in statuses and task2['status'] not in statuses: return 1
@@ -544,7 +565,8 @@ class Malone(IBugtracker):
         return 0
     def get_bug(self, id):
         try:
-            bugdata = utils.web.getUrl("%s/%d/+text" % (self.url.replace('malone','bugs'),id))
+            print("%s/bugs/%d/+text" % (self.url,id))
+            bugdata = utils.web.getUrl("%s/bugs/%d/+text" % (self.url,id))
         except Exception, e:
             if '404' in str(e):
                 raise BugNotFoundError
@@ -576,9 +598,9 @@ class Malone(IBugtracker):
         if bugdata['duplicate-of']:
             dupbug = self.get_bug(int(bugdata['duplicate-of']))
             return [(id, t, bugdata['title'] + (' (dup-of: %d)' % dupbug[0][0]), taskdata['importance'], 
-                    taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))] + dupbug
+                    taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url, id))] + dupbug
         return [(id, t, bugdata['title'], taskdata['importance'], 
-                taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url.replace('/malone',''), id))]
+                taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url, id))]
             
 # <rant>
 # Debbugs sucks donkeyballs
@@ -784,7 +806,9 @@ registerBugtracker('ximian', 'http://bugzilla.ximian.com', 'Ximian', 'bugzilla')
 registerBugtracker('freedesktop', 'http://bugzilla.freedesktop.org', 'Freedesktop', 'bugzilla')
 registerBugtracker('freedesktop2', 'http://bugs.freedesktop.org', 'Freedesktop', 'bugzilla')
 registerBugtracker('openoffice', 'http://openoffice.org/issues', 'OpenOffice.org', 'issuezilla')
-registerBugtracker('malone', 'https://launchpad.net/malone', 'Malone', 'malone')
+registerBugtracker('launchpad', 'https://launchpad.net', 'Launchpad', 'launchpad')
+registerBugtracker('lp', 'https://launchpad.net', 'Launchpad', 'launchpad')
+registerBugtracker('malone', 'https://launchpad.net', 'Launchpad', 'launchpad')
 registerBugtracker('debian', 'http://bugs.debian.org', 'Debian', 'debbugs')
 registerBugtracker('trac', 'http://trac.edgewall.org/ticket', 'Trac', 'trac')
 registerBugtracker('django', 'http://code.djangoproject.com/ticket', 'Django', 'trac')
