@@ -25,6 +25,7 @@ import re, os, time, imaplib, commands
 import xml.dom.minidom as minidom
 from htmlentitydefs import entitydefs as entities
 import email.FeedParser
+import SOAPpy
 
 def registerBugtracker(name, url='', description='', trackertype=''):
     conf.supybot.plugins.Bugtracker.bugtrackers().add(name)
@@ -610,68 +611,32 @@ class Launchpad(IBugtracker):
 #   has no search on bugid)
 # * The damn thing allow incomplete bugs, eg bugs without severity set. WTF?!?
 #
-# So sometimes the plugin will return incorrect things - so what. Fix the
-# damn bts before complaining.
-# There's a patch against the thing since august 2003 for enabling machine
-# readable output: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=207225
-#
-# It's not only releases that go slow in Debian, apparently the bugtracker
-# development is even slower than that...
+# Fortunately bugs.donarmstrong.com has a SOAP interface which we can use.
 # </rant>
 class Debbugs(IBugtracker):
-    def parse_mail(self, id, text, data):
-        (headers, text) = text.split("\n\n", 1)
-        for h in headers.split("\n"):
-            h2 = h.lower()
-            if h2.startswith('to') and ('%d-close' % id in h2 or '%d-done' % id in h2):
-                data['status'] = 'Closed'
-            if data['title'] == 'unknown' and h2.startswith('subject'):
-                data['title'] = h[8:].strip()
-    
-        infirstmail = False
-        for l in text.split("\n"):
-            l2 = l.lower().split()
-            if len(l2) == 0:
-                if infirstmail: return
-                continue
-            if l2[0] in ['quit', 'stop', 'thank', '--']:
-                return
-            elif l2[0] == 'package:':
-                data['package'] = l2[1]
-                infirstmail = True
-            elif l2[0] == 'severity:':
-                data['severity'] = l2[1]
-            try:
-                if len(l2) > 1:
-                    if l2[0] in ['reassign', 'reopen', 'retitle', 'severity'] and not (int(l2[1]) == id):
-                        continue
-            except ValueError: # Parsing to int failed, so not an integer
-                if l2[0] == 'reassign':
-                    data['package'] = l2[2]
-                elif l2[0] == 'reopen':
-                    data['status'] = 'Open'
-                elif l2[0] == 'retitle':
-                    data['title'] = l.split(None,2)[2]
-                elif l2[0] == 'severity':
-                    data['severity'] = ls[2]
-                
+    def __init__(self, *args, **kwargs):
+        IBugtracker.__init__(self, *args, **kwargs)
+        self.soap_proxy = SOAPpy.SOAPProxy("bugs.donarmstrong.com/cgi-bin/soap.cgi", "Debbugs/SOAP/Status")
+        self.soap_proxy.soapaction = "Debbugs/SOAP/Status#get_status"
+        
     def get_bug(self, id):
-        url = "%s/cgi-bin/bugreport.cgi?bug=%d;mbox=yes" % (self.url,id)
         try:
-            bugdata = utils.web.getUrl(url)
+            raw = self.soap_proxy.get_status(id)
         except Exception, e:
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
-        if '<p>There is no record of Bug' in bugdata:
+        if not raw:
             raise BugNotFoundError
+        raw = raw['item']['value']
         try:
-            data = {'package': 'unknown','title': 'unknown','severity':'unknown','status':'Open'}
-            for m in bugdata.split("\n\n\nFrom"):
-                self.parse_mail(id, m, data)
+            if len(raw['fixed_versions']):
+                status = 'Fixed'
+            else:
+                status = 'Open'
+            return [(id, raw['package'], raw['subject'], raw['severity'], status, '', "%s/%s" % (self.url, id))]
         except Exception, e:
             s = 'Could not parse data returned by %s bugtracker: %s' % (self.description, e)
             raise BugtrackerError, s
-        return [(id, data['package'], data['title'], data['severity'], data['status'], '', "%s/%s" % (self.url, id))]
 
 # For trac based trackers we also need to do some screenscraping - should be
 # doable unless a certain track instance uses weird templates.
