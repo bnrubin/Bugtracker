@@ -28,8 +28,6 @@ conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'bugSnarfer',
     will have their information reported into the channel."""))
 conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'bugReporter',
     registry.String('', """Report new bugs (experimental)"""))
-conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'bugReporter_closed',
-    registry.String('', """Report new bugs (experimental)"""))
 conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'replyNoBugtracker',
     registry.String('I don\'t have a bugtracker %s.', """Determines the phrase
     to use when notifying the user that there is no information about that
@@ -48,10 +46,10 @@ conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'replyWhenNotFound',
 conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'repeatdelay',
     registry.Integer(60, """Number of seconds to wait between repeated bug calls"""))
 conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'showassignee',
-    registry.Boolean(False, """Whether to show th assignee in bug reports"""))
+    registry.Boolean(False, """Whether to show the assignee in bug reports"""))
     
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'reportercache',
-    registry.String('', """Name of the basedir for the bugreporter cache"""))
+    registry.String('', """Name of the basedir for the bugreporter cache""",private=True))
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_server',
     registry.String('', """IMAP server for bugmail account""",private=True))
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_user',
@@ -59,5 +57,5 @@ conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_user',
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_password',
     registry.String('', """IMAP password for bugmail account""", private=True))
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_ssl',
-    registry.Boolean(False, """Use SSL for imap connections"""))
+    registry.Boolean(False, """Use SSL for imap connections""",private=True))
 

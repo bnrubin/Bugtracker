@@ -19,10 +19,10 @@ This plugin will display bug information when requested.
 import supybot
 import supybot.world as world
 
-__version__ = "2.5"
+__version__ = "2.5.1"
 __author__ = supybot.Author("Dennis Kaarsemaker","Seveas","dennis@kaarsemaker.net")
 __contributors__ = {}
-__url__ = 'http://bots.ubuntulinux.nl/'
+__url__ = 'http://ubotu.ubuntu-nl.org'
 
 import config
 reload(config)
