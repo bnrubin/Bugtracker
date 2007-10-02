@@ -73,7 +73,7 @@ class BugNotFoundError(Exception):
     """Pity, bug isn't there"""
     pass
 
-cvere = re.compile(r'<td><font[^>]*>description</font></td>\s*<td><font[^>]*>(.*?)\s*</font>', re.I | re.DOTALL)
+cvere = re.compile(r'<th.*?Description.*?<td.*?>(.*?)\s*</td>', re.I | re.DOTALL)
 class Bugtracker(callbacks.PluginRegexp):
     """Show a link to a bug report with a brief description"""
     threaded = True
