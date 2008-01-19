@@ -616,7 +616,7 @@ class Launchpad(IBugtracker):
 class Debbugs(IBugtracker):
     def __init__(self, *args, **kwargs):
         IBugtracker.__init__(self, *args, **kwargs)
-        self.soap_proxy = SOAPpy.SOAPProxy("bugs.donarmstrong.com/cgi-bin/soap.cgi", "Debbugs/SOAP/Status")
+        self.soap_proxy = SOAPpy.SOAPProxy("bugs.debian.org/cgi-bin/soap.cgi", "Debbugs/SOAP/Status")
         self.soap_proxy.soapaction = "Debbugs/SOAP/Status#get_status"
         
     def get_bug(self, id):
