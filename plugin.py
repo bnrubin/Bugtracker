@@ -238,7 +238,7 @@ class Bugtracker(callbacks.PluginRegexp):
     def rename(self, irc, msg, args, oldname, newname, newdesc):
         """<oldname> <newname>
 
-        Rename the bugtracker associated with <oldname> to <newname>
+        Rename the bugtracker associated with <oldname> to <newname>.
         """
         try:
             name = self.shorthand[oldname.lower()]
