@@ -83,6 +83,7 @@ class Bugtracker(callbacks.PluginRegexp):
     def __init__(self, irc):
         callbacks.PluginRegexp.__init__(self, irc)
         self.db = ircutils.IrcDict()
+        self.events = []
         for name in self.registryValue('bugtrackers'):
             registerBugtracker(name)
             group = self.registryValue('bugtrackers.%s' % name.replace('.','\\.'), value=False)
@@ -93,16 +94,21 @@ class Bugtracker(callbacks.PluginRegexp):
         self.shorthand = utils.abbrev(self.db.keys())
 
         # Schedule bug reporting
+        self.shown = {}
         if self.registryValue('imap_server') and self.registryValue('reportercache'):
             try:
                 schedule.removeEvent(self.name() + '.bugreporter')
             except:
                 pass
             schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name() + '.bugreporter')
-        self.shown = {}
+            self.events += [self.name() + '.bugreporter']
+            self.log.info('Adding scheduled event "%s.bugreporter"' % self.name())
 
     def die(self):
         try:
+            for event in self.events:
+                self.log.info('Removing scheduled event "%s"' % event)
+                schedule.removeEvent(event)
             schedule.removeEvent(self.name())
         except:
             pass
@@ -145,15 +151,24 @@ class Bugtracker(callbacks.PluginRegexp):
         for m in new_mail:
             msg = sc.fetch(m, 'RFC822')[1][0][1]
             fp = email.FeedParser.FeedParser()
+            sc.store(m, '+FLAGS', "(\Deleted)") # Mark message deleted so we don't have to process it again
             fp.feed(msg)
             bug = fp.close()
-            
-            tag = bug['Delivered-To']
-            if '+' not in tag:
-                self.log.info('Ignoring e-mail with no detectable bug')
+
+            if 'X-Launchpad-Bug' not in bug.keys():
+                self.log.info('Ignoring e-mail with no detectable bug (Not from Launchpad)')
                 continue
-                
-            tag = tag[tag.find('+')+1:tag.find('@')]
+            else:
+                tag = bug['X-Launchpad-Bug']
+                if 'distribution=' not in tag and 'product=' not in tag:
+                    self.log.info('Ignoring e-mail with no detectable bug (no distro/product)')
+                    continue
+                else:
+                    tag = tag.split(';')[0].strip().replace("product=",'').replace("distribution=","")
+
+            if not tag:
+                self.log.info('Ignoring e-mail with no detectible bug (bad tag)')
+
             if tag not in bugs:
                 bugs[tag] = {}
 
@@ -161,6 +176,9 @@ class Bugtracker(callbacks.PluginRegexp):
             if bug['X-Launchpad-Bug']:
                 tracker = self.db['launchpad']
                 id = int(bug['Reply-To'].split()[1])
+                subj = bug['Subject'];
+                if '[NEW]' not in subj: #Not a new bug
+                    continue
                 if self.is_new(tracker, tag, id):
                     component = bug['X-Launchpad-Bug']
                     if 'component' in component:
@@ -180,16 +198,19 @@ class Bugtracker(callbacks.PluginRegexp):
                         pass
             else:
                 self.log.info('Ignoring e-mail with no detectable bug')
-                
+
+        reported_bugs = 0
         for c in irc.state.channels:
-            tag = self.registryValue('bugReporter', channel=c)
-            if not tag:
+            tags = self.registryValue('bugReporter', channel=c)
+            if not tags:
                 continue
-            if tag not in bugs.keys():
-                continue
-            for b in sorted(bugs[tag].keys()):
-                irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[tag][b][bugs[tag][b].find('bug ')+4:]))
-        print "Reported!"
+            for tag in tags.split(','):
+                if not tag or tag not in bugs.keys():
+                    continue
+                for b in sorted(bugs[tag].keys()):
+                    irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[tag][b][bugs[tag][b].find('bug ')+4:]))
+                    reported_bugs = reported_bugs+1
+        self.log.info("Reported %d/%d bugs" % (reported_bugs, len(new_mail)))
 
     def add(self, irc, msg, args, name, trackertype, url, description):
         """<name> <type> <url> [<description>]
@@ -565,9 +586,9 @@ class Launchpad(IBugtracker):
             return 0
         return 0
     def get_bug(self, id):
+        bug_url = '%s/bugs/%d' % (self.url,id)
         try:
-            print("%s/bugs/%d/+text" % (self.url,id))
-            bugdata = utils.web.getUrl("%s/bugs/%d/+text" % (self.url,id))
+            bugdata = utils.web.getUrl("%s/+text" % bug_url)
         except Exception, e:
             if '404' in str(e):
                 raise BugNotFoundError
@@ -599,9 +620,9 @@ class Launchpad(IBugtracker):
         if bugdata['duplicate-of']:
             dupbug = self.get_bug(int(bugdata['duplicate-of']))
             return [(id, t, bugdata['title'] + (' (dup-of: %d)' % dupbug[0][0]), taskdata['importance'], 
-                    taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url, id))] + dupbug
+                    taskdata['status'], taskdata['assignee'], bug_url)] + dupbug
         return [(id, t, bugdata['title'], taskdata['importance'], 
-                taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url, id))]
+                taskdata['status'], taskdata['assignee'], bug_url)]
             
 # <rant>
 # Debbugs sucks donkeyballs
