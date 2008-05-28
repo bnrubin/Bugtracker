@@ -314,7 +314,7 @@ class Bugtracker(callbacks.PluginRegexp):
 
         # Don't double on commands
         s = str(msg).split(':')[2]
-        if s[0] in str(conf.supybot.reply.whenAddressedBy.chars):
+        if s and s[0] in str(conf.supybot.reply.whenAddressedBy.chars):
             return
         sure_bug = match.group('bt').endswith('bug') or match.group('bt').endswith('bug')
         
