@@ -784,7 +784,7 @@ for k in v.keys():
         defined_bugtrackers[k.lower()] = v[k]
 
 registerBugtracker('mozilla', 'http://bugzilla.mozilla.org', 'Mozilla', 'bugzilla')
-registerBugtracker('ubuntu', 'http://bugzilla.ubuntu.com', 'Ubuntu', 'bugzilla')
+registerBugtracker('ubuntu', 'https://launchpad.net', 'Ubuntu', 'launchpad')
 registerBugtracker('gnome', 'http://bugzilla.gnome.org', 'Gnome', 'bugzilla')
 registerBugtracker('gnome2', 'http://bugs.gnome.org', 'Gnome', 'bugzilla')
 registerBugtracker('kde', 'http://bugs.kde.org', 'KDE', 'bugzilla')
