@@ -27,6 +27,7 @@ Bugtracker dialects (types) this plugin understands:
 * Sourceforge (needs atid and group_id in the url!)
 * WikiForms (see bugs.gnewsense.org for an example)
 * str.php from the CUPS project
+* Mantis (http://www.mantisbt.org)
 
 To request a bug report, use this syntax:
 
