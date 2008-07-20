@@ -217,7 +217,7 @@ class Bugtracker(callbacks.PluginRegexp):
 
         Add a bugtracker <url> to the list of defined bugtrackers. <type> is the
         type of the tracker (currently only Launchpad, Debbugs, Bugzilla,
-        Issuezilla and Trac are known). <name> is the name that will be used to
+        Issuezilla, Mantis and Trac are known). <name> is the name that will be used to
         reference the bugzilla in all commands. Unambiguous abbreviations of
         <name> will be accepted also.  <description> is the common name for the
         bugzilla and will be listed with the bugzilla query; if not given, it
@@ -659,6 +659,27 @@ class Debbugs(IBugtracker):
             s = 'Could not parse data returned by %s bugtracker: %s' % (self.description, e)
             raise BugtrackerError, s
 
+class Mantis(IBugtracker):
+    def __init__(self, *args, **kwargs):
+        IBugtracker.__init__(self, *args, **kwargs)
+        self.soap_proxy = SOAPpy.SOAPProxy(self.url + "/api/soap/mantisconnect.php", "http://futureware.biz/mantisconnect")
+        self.soap_proxy.soapaction = "http://futureware.biz/mantisconnect#mc_issue_get"
+
+    def get_bug(self, id):
+        url = self.url + "/view.php?id=%i" % id
+        try:
+            raw = self.soap_proxy.mc_issue_get('', "", id)
+        except Exception, e:
+            s = 'Could not parse data returned by %s: %s' % (self.description, e)
+            raise BugtrackerError, s
+        if not raw:
+            raise BugNotFoundError
+        try:
+            return [(id, raw['project']['name'], raw['summary'], raw['priority']['name'], raw['resolution']['name'], '', url)]
+        except Exception, e:
+            s = 'Could not parse data returned by %s bugtracker: %s' % (self.description, e)
+            raise BugtrackerError, s
+
 # For trac based trackers we also need to do some screenscraping - should be
 # doable unless a certain track instance uses weird templates.
 class Trac(IBugtracker):
@@ -801,6 +822,7 @@ registerBugtracker('django', 'http://code.djangoproject.com/ticket', 'Django', '
 registerBugtracker('cups', 'http://www.cups.org/str.php', 'CUPS', 'str')
 registerBugtracker('gnewsense', 'http://bugs.gnewsense.org/Bugs', 'gNewSense', 'wikiforms')
 registerBugtracker('supybot', 'http://sourceforge.net/tracker/?group_id=58965&atid=489447', 'Supybot', 'sourceforge')
+registerBugtracker('mantis', "http://www.mantisbt.org/bugs", "Mantis", 'mantis')
 # Don't delete this one
 registerBugtracker('sourceforge', 'http://sourceforge.net/tracker/', 'Sourceforge', 'sourceforge')
 Class = Bugtracker
