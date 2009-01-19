@@ -237,7 +237,7 @@ class Bugtracker(callbacks.PluginRegexp):
         registerBugtracker(name, url, description, trackertype)
         self.shorthand = utils.abbrev(self.db.keys())
         irc.replySuccess()
-    add = wrap(add, ['something', 'something', 'url', additional('text')])
+    add = wrap(add, [('checkCapability', 'admin'), 'something', 'something', 'url', additional('text')])
 
     def remove(self, irc, msg, args, name):
         """<abbreviation>
@@ -254,7 +254,7 @@ class Bugtracker(callbacks.PluginRegexp):
         except KeyError:
             s = self.registryValue('replyNoBugtracker', msg.args[0])
             irc.error(s % name)
-    remove = wrap(remove, ['text'])
+    remove = wrap(remove, [('checkCapability', 'admin'), 'text'])
 
     def rename(self, irc, msg, args, oldname, newname, newdesc):
         """<oldname> <newname>
@@ -276,7 +276,7 @@ class Bugtracker(callbacks.PluginRegexp):
         except KeyError:
             s = self.registryValue('replyNoBugtracker', msg.args[0])
             irc.error(s % name)
-    rename = wrap(rename, ['something','something', additional('text')])
+    rename = wrap(rename, [('checkCapability', 'admin'), 'something','something', additional('text')])
 
     def list(self, irc,  msg, args, name):
         """[abbreviation]
@@ -345,6 +345,7 @@ class Bugtracker(callbacks.PluginRegexp):
         if not name:
             snarfTarget = self.registryValue('snarfTarget', msg.args[0]).lower()
             if not snarfTarget:
+                self.log.info("no snarfTarget")
                 return
             try:
                 name = self.shorthand[snarfTarget.lower()]
