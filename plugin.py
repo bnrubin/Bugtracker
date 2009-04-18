@@ -694,8 +694,10 @@ class Trac(IBugtracker):
                 raise BugNotFoundError
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
+        # Make sure all the variables are set, just incase the HTML doesn't contain them
+        title = status = package = severity = assignee = "Unknown"
         for l in bugdata.split("\n"):
-            if 'class="summary"' in l:
+            if 'class="summary' in l:
                 title = l[l.find('>')+1:l.find('</')]
             if 'class="status"' in l:
                 status = l[l.find('>(')+2:l.find(')')]
