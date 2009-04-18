@@ -681,35 +681,39 @@ class Mantis(IBugtracker):
             s = 'Could not parse data returned by %s bugtracker: %s' % (self.description, e)
             raise BugtrackerError, s
 
-# For trac based trackers we also need to do some screenscraping - should be
-# doable unless a certain track instance uses weird templates.
+# For trac based trackers we get the tab-separated-values format.
+# The other option is a comma-separated-values format, but if the description
+# has commas, things get tricky.
+# This should be more robust than the screen-scraping done previously.
 class Trac(IBugtracker):
-    def get_bug(self, id):
-        url = "%s/%d" % (self.url, id)
+    def get_bug(self, id): # This is still a little rough, but it works :)
+        bug_url = "%s/%d" % (self.url, id)
         try:
-            bugdata = utils.web.getUrl(url)
+            raw = utils.web.getUrl("%s?format=tab" % bug_url)
         except Exception, e:
-            # Hacketiehack
             if 'HTTP Error 500' in str(e):
                 raise BugNotFoundError
             s = 'Could not parse data returned by %s: %s' % (self.description, e)
             raise BugtrackerError, s
-        # Make sure all the variables are set, just incase the HTML doesn't contain them
+        raw = raw.replace("\r\n", '\n')
+        (headers, rest) = raw.split('\n', 1)
+        headers = headers.strip().split('\t')
+        rest = rest.strip().split('\t')
         title = status = package = severity = assignee = "Unknown"
-        for l in bugdata.split("\n"):
-            if 'class="summary' in l:
-                title = l[l.find('>')+1:l.find('</')]
-            if 'class="status"' in l:
-                status = l[l.find('>(')+2:l.find(')')]
-            if 'headers="h_component"' in l:
-                package = l[l.find('>')+1:l.find('</')]
-            if 'headers="h_severity"' in l:
-                severity = l[l.find('>')+1:l.find('</')]
-            if 'headers="h_stage"' in l:
-                severity = l[l.find('>')+1:l.find('</')]
-            if 'headers="h_owner"' in l:
-                assignee = l[l.find('>')+1:l.find('</')]
-        return [(id, package, title, severity, status, assignee, "%s/%s" % (self.url, id))]
+        if "summary" in headers:
+            title = rest[headers.index("summary")]
+        if "status" in headers:
+            status = rest[headers.index("status")]
+        if "component" in headers:
+            package = rest[headers.index("component")]
+        if "severity" in headers:
+            severity = rest[headers.index("severity")]
+        if "owner" in headers:
+            assingee = rest[headers.index("owner")]
+        if severity == "Unknown" and "priority" in headers:
+            severity = rest[headers.index("priority")]
+
+        return [(id, package, title, severity, status, assignee, bug_url)]
         
 class WikiForms(IBugtracker):
     def get_bug(self, id):
