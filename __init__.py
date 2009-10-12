@@ -22,7 +22,7 @@ import supybot.world as world
 __version__ = "2.5.1"
 __author__ = supybot.Author("Dennis Kaarsemaker","Seveas","dennis@kaarsemaker.net")
 __contributors__ = {}
-__url__ = 'http://ubotu.ubuntu-nl.org'
+__url__ = 'http://ubottu.com/'
 
 import config
 reload(config)

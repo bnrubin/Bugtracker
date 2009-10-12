@@ -49,7 +49,7 @@ conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'showassignee',
     registry.Boolean(False, """Whether to show the assignee in bug reports"""))
     
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'reportercache',
-    registry.String('', """Name of the basedir for the bugreporter cache""",private=True))
+    registry.String('', """Name of the basedir for the bugreporter cache""", private=True))
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_server',
     registry.String('', """IMAP server for bugmail account""",private=True))
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_user',
@@ -57,5 +57,5 @@ conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_user',
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_password',
     registry.String('', """IMAP password for bugmail account""", private=True))
 conf.registerGlobalValue(conf.supybot.plugins.Bugtracker, 'imap_ssl',
-    registry.Boolean(False, """Use SSL for imap connections""",private=True))
+    registry.Boolean(False, """Use SSL for imap connections""", private=True))
 
