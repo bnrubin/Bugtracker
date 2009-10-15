@@ -99,7 +99,8 @@ class Bugtracker(callbacks.PluginRegexp):
             if group.trackertype() in defined_bugtrackers.keys():
                 self.db[name] = defined_bugtrackers[group.trackertype()](name, group.url(), group.description())
             else:
-                raise BugtrackerError("Unknown trackertype: %s" % group.trackertype())
+#                raise BugtrackerError("Unknown trackertype: %s (%s)" % (group.trackertype(), name))
+                self.log.warning("Unknown trackertype: %s (%s)" % (group.trackertype(), name))
         self.shorthand = utils.abbrev(self.db.keys())
 
         # Schedule bug reporting
