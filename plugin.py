@@ -103,7 +103,7 @@ class Bugtracker(callbacks.PluginRegexp):
         self.shorthand = utils.abbrev(self.db.keys())
 
         # Schedule bug reporting
-        self.shown {}
+        self.shown = {}
         if self.registryValue('imap_server') and self.registryValue('reportercache'):
             try:
                 schedule.removeEvent(self.name() + '.bugreporter')
