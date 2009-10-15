@@ -118,7 +118,7 @@ class Bugtracker(callbacks.PluginRegexp):
            for event in self.events:
                 self.log.info('Removing scheduled event "%s"' % event)
                 schedule.removeEvent(event)
-            schedule.removeEvent(self.name())
+                schedule.removeEvent(self.name())
         except:
             pass
 
