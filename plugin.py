@@ -316,7 +316,7 @@ class Bugtracker(callbacks.PluginRegexp):
     list = wrap(list, [additional('text')])
 
     def bugSnarfer(self, irc, msg, match):
-        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+))\s+#?(?P<bug>\d+(?!\d*\.\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*\.\d+))*)"""
+        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+))\s+#?(?P<bug>\d+(?!\d*[\-\.]\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*[\-\.]\d+))*)"""
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
         nbugs = msg.tagged('nbugs')
