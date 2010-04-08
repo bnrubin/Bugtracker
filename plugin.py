@@ -316,7 +316,7 @@ class Bugtracker(callbacks.PluginRegexp):
     list = wrap(list, [additional('text')])
 
     def bugSnarfer(self, irc, msg, match):
-        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+))\s+#?(?P<bug>\d+(?!\d*[\-\.]\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*[\-\.]\d+))*)"""
+        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+):?)\s+#?(?P<bug>\d+(?!\d*[\-\.]\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*[\-\.]\d+))*)"""
         if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
             return
         nbugs = msg.tagged('nbugs')
@@ -340,6 +340,9 @@ class Bugtracker(callbacks.PluginRegexp):
             bugids = [x for x in bugids if int(x) > 100]
         msg.tag('nbugs', nbugs + len(bugids))
         bt = map(lambda x: x.lower(), match.group('bt').split())
+        # Strip off trailing ':' from the tracker name. Allows for (LP: #nnnnnn)
+        if len(bt) and bt[0].endswith(':'):
+            bt[0] = bt[:-1]
         name = ''
         if len(bt) == 1 and not (bt[0] in ['bug','bugs']):
             try:
