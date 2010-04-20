@@ -20,6 +20,7 @@ import supybot.callbacks as callbacks
 import supybot.conf as conf
 import supybot.registry as registry
 import supybot.schedule as schedule
+import supybot.log as supylog
 
 import re, os, time, imaplib, commands
 import xml.dom.minidom as minidom
@@ -375,9 +376,6 @@ class Bugtracker(callbacks.PluginRegexp):
         else:
             for bugid in bugids:
                 bugid = int(bugid)
-                if bugid == 1 and tracker == self.db["lp"]:
-                    irc.reply("https://bugs.launchpad.net/ubuntu/+bug/1 (Not reporting large bug)")
-                    continue
                 try:
                     report = self.get_bug(msg.args[0],tracker,bugid,self.registryValue('showassignee', msg.args[0]))
                 except BugNotFoundError:
@@ -585,6 +583,32 @@ class Issuezilla(IBugtracker):
         return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
 
 class Launchpad(IBugtracker):
+    def __init__(self, *args, **kwargs):
+        IBugtracker.__init__(self, *args, **kwargs)
+        self.lp = None
+
+        # A word to the wise:
+        # The Launchpad API is much better than the /+text interface we currently use,
+        # it's faster and easier to get the information we need.
+        # The current /+text interface is not really maintained by Launchpad and most,
+        # or all, of the Launchpad developers hate it. For this reason, we are dropping
+        # support for /+text in the future in favour of launchpadlib.
+        # Terence Simpson (tsimpson) 2010-04-20
+
+        try: # Attempt to use launchpadlib, python bindings for the Launchpad API
+            from launchpadlib.launchpad import Launchpad, EDGE_SERVICE_ROOT
+            cachedir = os.path.join(conf.supybot.directories.data.tmp(), 'lpcache')
+            if hasattr(Launchpad, 'login_anonymously'):
+                self.lp = Launchpad.login_anonymously("Ubuntu Bots - Bugtracker", EDGE_SERVICE_ROOT, cachedir)
+            else:
+                self.lp = Launchpad.login("Ubuntu Bots - Bugtracker", '', '', EDGE_SERVICE_ROOT, cahedir)
+        except ImportError:
+            # Ask for launchpadlib to be installed
+            supylog.warning("Please install python-launchpadlib, the old interface is depricated")
+        except Exception: # Something unexpected happened
+            self.lp = None
+            supylog.error("Error accessing Launchapd API")
+
     def _parse(self, task):
         parser = email.FeedParser.FeedParser()
         parser.feed(task)
@@ -592,8 +616,8 @@ class Launchpad(IBugtracker):
     def _sort(self, task1, task2):
         # Status sort: 
         try:
-            statuses   = ['Rejected', 'Fix Released', 'Fix Committed', 'Unconfirmed','Needs Info','Confirmed','In Progress']
-            severities = ['Undecided', 'Wishlist', 'Minor', 'Low', 'Normal', 'Medium', 'Major', 'High', 'Critical']
+            statuses = ["Unknown", "Invalid", "Won't fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
+            severities = ["Unknown", "Undecided", "Wishlist", "Low", "Medium", "High", "Critical"]
             if task1['status'] not in statuses and task2['status'] in statuses: return -1
             if task1['status'] in statuses and task2['status'] not in statuses: return 1
             if task1['importance'] not in severities and task2['importance'] in severities: return -1
@@ -609,9 +633,72 @@ class Launchpad(IBugtracker):
         except: # Launchpad changed again?
             return 0
         return 0
+
     def get_bug(self, id):
+        if self.lp:
+            return self.get_bug_new(id)
+        return self.get_bug_old(id)
+
+    def get_bug_new(self, id):
+        def _sort(task1, task2):
+            statuses = ["Unknown", "Invalid", "Won't fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
+            severities = ["Unknown", "Undecided", "Wishlist", "Low", "Medium", "High", "Critical"]
+            task1_status = task1.status
+            task1_importance = task1.importance
+            task2_status = task2.status
+            task2_importance = task2.importance
+            if task1_status != task2_status:
+                if statuses.index(task1_status) < statuses.index(task2_status):
+                    return -1
+                return 1
+            if task1_importance != task2_importance:
+                if severities.index(task1_importance) < severities.index(task2_importance):
+                    return -1
+                return 1
+            return 0
+
         try:
-#            print("%s/bugs/%d/+text" % (self.url,id))
+            bugdata = self.lp.bugs[id]
+            if bugdata.private:
+                raise BugtrackerError, "This bug is private"
+            dup = bugdata.duplicate_of
+            affected = bugdata.users_affected_count_with_dupes
+            heat = bugdata.heat
+            tasks = bugdata.bug_tasks
+
+            if tasks.total_size != 1:
+                tasks = list(tasks)
+                tasks.sort(_sort)
+                taskdata = tasks[-1]
+            else:
+                taskdata = tasks[0]
+
+            assignee = taskdata.assignee
+            t = taskdata.bug_target_display_name #task name
+
+            if assignee: # "Diaplay Name (Launchpad ID)"
+                assignee = u"%s (%s)" % (assignee.display_name, assignee.name)
+            else:
+                assignee = ''
+            
+        except Exception, e:
+            supylog.exception("Error gathering bug data for %s bug %d" % (self.description, id))
+            s = 'Could not parse data returned by %s: %s (%s/bugs/%d)' % (self.description, e, self.url, id)
+            raise BugtrackerError, s
+
+        if dup:
+            dupbug = self.get_bug(dup.id)
+            return [(id, t, bugdata.title + (' (dup-of: %d)' % dup.id), taskdata.importance,
+                    taskdata.status, assignee, "%s/bugs/%s" % (self.url, id))] + dupbug
+        ##NOTE: The affected/heat display should probably be configurable (tsimpson)
+        return [(id, t, bugdata.title + " (affected: %d, heat: %d)" % (affected, heat), taskdata.importance, taskdata.status,
+                assignee, "%s/bugs/%s" % (self.url, id))]
+
+    def get_bug_old(self, id):
+        if id == 1:
+            raise BugtrackerError, "https://bugs.launchpad.net/ubuntu/+bug/1 (Not reporting large bug)"
+
+        try:
             bugdata = utils.web.getUrl("%s/bugs/%d/+text" % (self.url,id))
         except Exception, e:
             if '404' in str(e):
