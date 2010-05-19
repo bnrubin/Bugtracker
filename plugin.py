@@ -493,7 +493,7 @@ class Bugtracker(callbacks.PluginRegexp):
                                                                           title, severity, status, url))
             else:
                 if showext:
-                    reports.append("%s bug %s \"%s\" %s [%s,%s] %s" % (tracker.description, bid, title, extinfo severity, status, url))
+                    reports.append("%s bug %s \"%s\" %s [%s,%s] %s" % (tracker.description, bid, title, extinfo, severity, status, url))
                 else:
                     reports.append("%s bug %s \"%s\" [%s,%s] %s" % (tracker.description, bid, title, severity, status, url))
             if do_assignee and assignee:
