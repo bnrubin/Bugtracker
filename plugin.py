@@ -473,16 +473,29 @@ class Bugtracker(callbacks.PluginRegexp):
         for r in tracker.get_bug(id):
             if not self.is_ok(channel, tracker, r[0]):
                 continue
-            (bid, product, title, severity, status, assignee, url) = r
+            showext = self.registryValue('extended', channel)
+            extinfo = ''
+            if len(r) == 8:
+                (bid, product, title, severity, status, assignee, url, extinfo) = r
+            else:
+                (bid, product, title, severity, status, assignee, url) = r
+
             severity = severity[0].upper() + severity[1:].lower()
             status = status[0].upper() + status[1:].lower()
             if not do_url:
                 url = ''
             if product:
-                reports.append("%s bug %s in %s \"%s\" [%s,%s] %s" % (tracker.description, bid, product, 
-                                                                      title, severity, status, url))
+                if showext:
+                    reports.append("%s bug %s in %s \"%s\" %s [%s,%s] %s" % (tracker.description, bid, product, 
+                                                                          title, extinfo, severity, status, url))
+                else:
+                    reports.append("%s bug %s in %s \"%s\" [%s,%s] %s" % (tracker.description, bid, product, 
+                                                                          title, severity, status, url))
             else:
-                reports.append("%s bug %s \"%s\" [%s,%s] %s" % (tracker.description, bid, title, severity, status, url))
+                if showext:
+                    reports.append("%s bug %s \"%s\" %s [%s,%s] %s" % (tracker.description, bid, title, extinfo severity, status, url))
+                else:
+                    reports.append("%s bug %s \"%s\" [%s,%s] %s" % (tracker.description, bid, title, severity, status, url))
             if do_assignee and assignee:
                 reports[-1] = reports[-1] + (" - Assigned to %s" % assignee)
         return reports
@@ -680,11 +693,13 @@ class Launchpad(IBugtracker):
                 assignee = u"%s (%s)" % (assignee.display_name, assignee.name)
             else:
                 assignee = ''
-            
+
         except Exception, e:
             supylog.exception("Error gathering bug data for %s bug %d" % (self.description, id))
             s = 'Could not parse data returned by %s: %s (%s/bugs/%d)' % (self.description, e, self.url, id)
             raise BugtrackerError, s
+
+        extinfo = "(affected: %d, heat: %d)" % (affected, heat)
 
         if dup:
             dupbug = self.get_bug(dup.id)
@@ -692,7 +707,7 @@ class Launchpad(IBugtracker):
                     taskdata.status, assignee, "%s/bugs/%s" % (self.url, id))] + dupbug
         ##NOTE: The affected/heat display should probably be configurable (tsimpson)
         return [(id, t, bugdata.title + " (affected: %d, heat: %d)" % (affected, heat), taskdata.importance, taskdata.status,
-                assignee, "%s/bugs/%s" % (self.url, id))]
+                assignee, "%s/bugs/%s" % (self.url, id), extinfo)]
 
     def get_bug_old(self, id):
         if id == 1:
