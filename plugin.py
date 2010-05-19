@@ -705,8 +705,7 @@ class Launchpad(IBugtracker):
             dupbug = self.get_bug(dup.id)
             return [(id, t, bugdata.title + (' (dup-of: %d)' % dup.id), taskdata.importance,
                     taskdata.status, assignee, "%s/bugs/%s" % (self.url, id))] + dupbug
-        ##NOTE: The affected/heat display should probably be configurable (tsimpson)
-        return [(id, t, bugdata.title + " (affected: %d, heat: %d)" % (affected, heat), taskdata.importance, taskdata.status,
+        return [(id, t, bugdata.title, taskdata.importance, taskdata.status,
                 assignee, "%s/bugs/%s" % (self.url, id), extinfo)]
 
     def get_bug_old(self, id):
