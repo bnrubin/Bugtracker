@@ -1,5 +1,7 @@
+# -*- Encoding: utf-8 -*-
 ###
 # Copyright (c) 2005-2007 Dennis Kaarsemaker
+# Copyright (c) 2008-2010 Terence Simpson
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -101,7 +103,7 @@ class Bugtracker(callbacks.PluginRegexp):
                 self.db[name] = defined_bugtrackers[group.trackertype()](name, group.url(), group.description())
             else:
 #                raise BugtrackerError("Unknown trackertype: %s (%s)" % (group.trackertype(), name))
-                self.log.warning("Unknown trackertype: %s (%s)" % (group.trackertype(), name))
+                self.log.warning("Bugtracker: Unknown trackertype: %s (%s)" % (group.trackertype(), name))
         self.shorthand = utils.abbrev(self.db.keys())
 
         # Schedule bug reporting
@@ -113,12 +115,12 @@ class Bugtracker(callbacks.PluginRegexp):
                 pass
             schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name() + '.bugreporter')
             self.events += [self.name() + '.bugreporter']
-            self.log.info('Adding scheduled event "%s.bugreporter"' % self.name())
+            self.log.info('Bugtracker: Adding scheduled event "%s.bugreporter"' % self.name())
 
     def die(self):
         try:
            for event in self.events:
-                self.log.info('Removing scheduled event "%s"' % event)
+                self.log.info('Bugtracker: Removing scheduled event "%s"' % event)
                 schedule.removeEvent(event)
                 schedule.removeEvent(self.name())
         except:
@@ -148,7 +150,7 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def reportnewbugs(self,irc):
         # Compile list of bugs
-        self.log.info("Checking for new bugs")
+        self.log.info("Bugtracker: Checking for new bugs")
         bugs = {}
         if self.registryValue('imap_ssl'):
             sc = imaplib.IMAP4_SSL(self.registryValue('imap_server'))
@@ -168,18 +170,18 @@ class Bugtracker(callbacks.PluginRegexp):
             tag = None
 
             if 'X-Launchpad-Bug' not in bug.keys():
-                self.log.info('Ignoring e-mail with no detectable bug (Not from Launchpad)')            
+                self.log.info('Bugtracker: Ignoring e-mail with no detectable bug (Not from Launchpad)')            
                 continue
             else:
                 tag = bug['X-Launchpad-Bug']
                 if 'distribution=' not in tag and 'product=' not in tag:
-                    self.log.info('Ignoring e-mail with no detectable bug (no distro/product)')
+                    self.log.info('Bugtracker: Ignoring e-mail with no detectable bug (no distro/product)')
                     continue
                 else:
                     tag = tag.split(';')[0].strip().replace("product=",'').replace("distribution=","")
 
             if not tag:
-                self.log.info('Ignoring e-mail with no detectible bug (bad tag)')
+                self.log.info('Bugtracker: Ignoring e-mail with no detectible bug (bad tag)')
                 
             tag = tag[tag.find('+')+1:tag.find('@')]
             if tag not in bugs:
@@ -207,10 +209,10 @@ class Bugtracker(callbacks.PluginRegexp):
                         if '[apport]' in bugs[tag][id]:
                             bugs[tag].pop(id)
                     except:
-                        self.log.info("Unable to get new bug %d" % id)
+                        self.log.info("Bugtracker: Unable to get new bug %d" % id)
                         pass
             else:
-                self.log.info('Ignoring e-mail with no detectable bug')
+                self.log.info('Bugtracker: Ignoring e-mail with no detectable bug')
 
         reported_bugs = 0
 
@@ -361,7 +363,7 @@ class Bugtracker(callbacks.PluginRegexp):
         if not name:
             snarfTarget = self.registryValue('snarfTarget', msg.args[0]).lower()
             if not snarfTarget:
-                self.log.warning("no snarfTarget for Bugtracker")
+                self.log.warning("Bugtracker: no snarfTarget for Bugtracker")
                 return
             try:
                 name = self.shorthand[snarfTarget.lower()]
