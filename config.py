@@ -22,14 +22,51 @@ class Bugtrackers(registry.SpaceSeparatedListOfStrings):
     List = ircutils.IrcSet
 
 def configure(advanced):
-    from supybot.questions import expect, something, yn
+    from supybot.questions import expect, something, yn, output
 
     def anything(prompt, default=None):
         """Because supybot is pure fail"""
         from supybot.questions import expect
         return expect(prompt, [], default=default)
 
-    conf.registerPlugin('Bugtracker', True)
+    Bugtracker = conf.registerPlugin('Bugtracker', True)
+
+    def getRepeatdelay():
+        output("How many seconds should the bot wait before repeating bug information?")
+        repeatdelay = something("Enter a number greater or equal to 0", default=Bugtracker.repeatdelay._default)
+
+        try:
+            repeatdelay = int(repeatdelay)
+            if repeatdelay < 0:
+                raise TypeError
+        except TypeError:
+            output("%r is an invalid value, it must be an integer greater or equal to 0" % repeatdelay)
+            return getRepeatdelay()
+        else:
+            return repeatdelay
+
+    bugSnarfer = yn("Enable detecting bugs numbers and URL in all channels?", default=Bugtracker.bugSnarfer._default)
+    if advanced:
+        replyNoBugtracker = something("What should the bot reply with when a a user requests information from an unknown bug tracker?", default=Bugtracker.replyNoBugtracker._default)
+        snarfTarget = something("What should be the default bug tracker used when one isn't specified?", default=Bugtracker.snarfTarget._default)
+        replyWhenNotFound = yn("Respond when a bug is not found?", default=Bugtracker.replyWhenNotFound._default)
+        repeatdelay = getRepeatdelay()
+    else:
+        replyNoBugtracker = Bugtracker.replyNoBugtracker._default
+        snarfTarget = Bugtracker.snarfTarget._default
+        replyWhenNotFound = Bugtracker.replyWhenNotFound._default
+        repeatdelay = Bugtracker.repeatdelay._default
+
+    showassignee = yn("Show the assignee of a bug in the reply?", default=Bugtracker.showassignee._default)
+    extended = yn("Show tracker-specific extended infomation?", default=Bugtracker.extended._default)
+
+    Bugtracker.bugSnarfer.setValue(bugSnarfer)
+    Bugtracker.replyNoBugtracker.setValue(replyNoBugtracker)
+    Bugtracker.snarfTarget.setValue(snarfTarget)
+    Bugtracker.replyWhenNotFound.setValue(replyWhenNotFound)
+    Bugtracker.repeatdelay.setValue(repeatdelay)
+    Bugtracker.showassignee.setValue(showassignee)
+    Bugtracker.extended.setValue(extended)
 
 Bugtracker = conf.registerPlugin('Bugtracker')
 
@@ -38,7 +75,7 @@ conf.registerChannelValue(Bugtracker, 'bugSnarfer',
     enabled, such that any Bugtracker URLs and bug ### seen in the channel
     will have their information reported into the channel."""))
 
-conf.registerChannelValue(conf.supybot.plugins.Bugtracker, 'bugReporter',
+conf.registerChannelValue(Bugtracker, 'bugReporter',
     registry.String('', """Report new bugs (experimental)"""))
 
 conf.registerChannelValue(Bugtracker, 'replyNoBugtracker',
@@ -47,7 +84,7 @@ conf.registerChannelValue(Bugtracker, 'replyNoBugtracker',
     bugtracker site."""))
 
 conf.registerChannelValue(Bugtracker, 'snarfTarget',
-    registry.String('', """Determines the bugtracker to query when the
+    registry.String('lp', """Determines the bugtracker to query when the
     snarf command is triggered"""))
 
 conf.registerGlobalValue(Bugtracker, 'bugtrackers',
