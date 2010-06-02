@@ -619,7 +619,7 @@ class Launchpad(IBugtracker):
                 self.lp = Launchpad.login("Ubuntu Bots - Bugtracker", '', '', EDGE_SERVICE_ROOT, cahedir)
         except ImportError:
             # Ask for launchpadlib to be installed
-            supylog.warning("Please install python-launchpadlib, the old interface is depricated")
+            supylog.warning("Please install python-launchpadlib, the old interface is deprecated")
         except Exception: # Something unexpected happened
             self.lp = None
             supylog.error("Error accessing Launchpad API")
