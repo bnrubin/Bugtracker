@@ -622,7 +622,7 @@ class Launchpad(IBugtracker):
             supylog.warning("Please install python-launchpadlib, the old interface is depricated")
         except Exception: # Something unexpected happened
             self.lp = None
-            supylog.error("Error accessing Launchapd API")
+            supylog.error("Error accessing Launchpad API")
 
     def _parse(self, task):
         parser = email.FeedParser.FeedParser()
