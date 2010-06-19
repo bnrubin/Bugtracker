@@ -631,7 +631,7 @@ class Launchpad(IBugtracker):
     def _sort(self, task1, task2):
         # Status sort: 
         try:
-            statuses = ["Unknown", "Invalid", "Won't fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
+            statuses = ["Unknown", "Invalid", "Won't Fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
             severities = ["Unknown", "Undecided", "Wishlist", "Low", "Medium", "High", "Critical"]
             if task1['status'] not in statuses and task2['status'] in statuses: return -1
             if task1['status'] in statuses and task2['status'] not in statuses: return 1
@@ -656,7 +656,7 @@ class Launchpad(IBugtracker):
 
     def get_bug_new(self, id):
         def _sort(task1, task2):
-            statuses = ["Unknown", "Invalid", "Won't fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
+            statuses = ["Unknown", "Invalid", "Won't Fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
             severities = ["Unknown", "Undecided", "Wishlist", "Low", "Medium", "High", "Critical"]
             task1_status = task1.status
             task1_importance = task1.importance
