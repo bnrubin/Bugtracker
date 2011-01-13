@@ -611,12 +611,13 @@ class Launchpad(IBugtracker):
         # Terence Simpson (tsimpson) 2010-04-20
 
         try: # Attempt to use launchpadlib, python bindings for the Launchpad API
-            from launchpadlib.launchpad import Launchpad, EDGE_SERVICE_ROOT
+            from launchpadlib.launchpad import Launchpad
+            from launchpadlib.uris import LPNET_SERVICE_ROOT
             cachedir = os.path.join(conf.supybot.directories.data.tmp(), 'lpcache')
             if hasattr(Launchpad, 'login_anonymously'):
-                self.lp = Launchpad.login_anonymously("Ubuntu Bots - Bugtracker", EDGE_SERVICE_ROOT, cachedir)
+                self.lp = Launchpad.login_anonymously("Ubuntu Bots - Bugtracker", LPNET_SERVICE_ROOT, cachedir)
             else:
-                self.lp = Launchpad.login("Ubuntu Bots - Bugtracker", '', '', EDGE_SERVICE_ROOT, cahedir)
+                self.lp = Launchpad.login("Ubuntu Bots - Bugtracker", '', '', LPNET_SERVICE_ROOT, cahedir)
         except ImportError:
             # Ask for launchpadlib to be installed
             supylog.warning("Please install python-launchpadlib, the old interface is deprecated")
