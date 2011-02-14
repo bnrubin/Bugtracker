@@ -452,6 +452,7 @@ class Bugtracker(callbacks.PluginRegexp):
             tracker = self.db[t]
             url = tracker.url.replace('http://','').replace('https://','')
             if 'sourceforge.net' in url:
+                return None
                 # Try to find the correct sf tracker
                 if str(sfdata) in tracker.url:
                     return tracker
@@ -514,6 +515,9 @@ class IBugtracker:
 
     def get_tracker(self, url):
         raise BugTrackerError("Bugtracker class does not implement get_tracker")
+
+    def __str__(self):
+        return self.__class__.__name__
 
 class Bugzilla(IBugtracker):
     def get_tracker(self, url):
