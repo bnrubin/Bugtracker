@@ -46,6 +46,8 @@ def configure(advanced):
             return repeatdelay
 
     bugSnarfer = yn("Enable detecting bugs numbers and URL in all channels?", default=Bugtracker.bugSnarfer._default)
+    cveSnarfer = yn("Enable detecting CVE numbers and URL in all channels?", default=Bugtracker.cveSnarfer._default)
+    oopsSnarfer = yn("Enable detecting Launchpad OOPS IDs in all channels?", default=Bugtracker.oopsSnarfer._default)
     if advanced:
         replyNoBugtracker = something("What should the bot reply with when a a user requests information from an unknown bug tracker?", default=Bugtracker.replyNoBugtracker._default)
         snarfTarget = something("What should be the default bug tracker used when one isn't specified?", default=Bugtracker.snarfTarget._default)
@@ -61,6 +63,8 @@ def configure(advanced):
     extended = yn("Show tracker-specific extended infomation?", default=Bugtracker.extended._default)
 
     Bugtracker.bugSnarfer.setValue(bugSnarfer)
+    Bugtracker.cveSnarfer.setValue(cveSnarfer)
+    Bugtracker.oopsSnarfer.setValue(oopsSnarfer)
     Bugtracker.replyNoBugtracker.setValue(replyNoBugtracker)
     Bugtracker.snarfTarget.setValue(snarfTarget)
     Bugtracker.replyWhenNotFound.setValue(replyWhenNotFound)
@@ -73,6 +77,16 @@ Bugtracker = conf.registerPlugin('Bugtracker')
 conf.registerChannelValue(Bugtracker, 'bugSnarfer',
     registry.Boolean(False, """Determines whether the bug snarfer will be
     enabled, such that any Bugtracker URLs and bug ### seen in the channel
+    will have their information reported into the channel."""))
+
+conf.registerChannelValue(Bugtracker, 'cveSnarfer',
+    registry.Boolean(False, """Determines whether the CVE snarfer will be
+    enabled, such that any CVE URLs and CVE-????-???? seen in the channel
+    will have their information reported into the channel."""))
+
+conf.registerChannelValue(Bugtracker, 'oopsSnarfer',
+    registry.Boolean(False, """Determines whether the OOPS snarfer will be
+    enabled, such that any OOPS ### seen in the channel
     will have their information reported into the channel."""))
 
 conf.registerChannelValue(Bugtracker, 'bugReporter',

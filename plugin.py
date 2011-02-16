@@ -267,7 +267,7 @@ class Bugtracker(callbacks.PluginRegexp):
             self.shorthand = utils.abbrev(self.db.keys())
             irc.replySuccess()
         except KeyError:
-            s = self.registryValue('replyNoBugtracker', msg.args[0])
+            s = self.registryValue('replyNoBugtracker', ircutils.isChannel(msg.args[0]) and msg.args[0] or None)
             irc.error(s % name)
     remove = wrap(remove, [('checkCapability', 'admin'), 'text'])
 
@@ -289,7 +289,7 @@ class Bugtracker(callbacks.PluginRegexp):
             self.shorthand = utils.abbrev(self.db.keys())
             irc.replySuccess()
         except KeyError:
-            s = self.registryValue('replyNoBugtracker', msg.args[0])
+            s = self.registryValue('replyNoBugtracker', ircutils.isChannel(msg.args[0]) and msg.args[0] or None)
             irc.error(s % name)
     rename = wrap(rename, [('checkCapability', 'admin'), 'something','something', additional('text')])
 
@@ -307,7 +307,7 @@ class Bugtracker(callbacks.PluginRegexp):
                                             self.db[name].__class__.__name__)
                 irc.reply('%s: %s, %s [%s]' % (name, description, url, type))
             except KeyError:
-                s = self.registryValue('replyNoBugtracker', msg.args[0])
+                s = self.registryValue('replyNoBugtracker', ircutils.isChannel(msg.args[0]) and msg.args[0] or None)
                 irc.error(s % name)
         else:
             if self.db:
@@ -320,7 +320,8 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def bugSnarfer(self, irc, msg, match):
         r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+):?)\s+#?(?P<bug>\d+(?!\d*[\-\.]\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*[\-\.]\d+))*)"""
-        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
+        channel = ircutils.isChannel(msg.args[0]) and msg.args[0] or None
+        if not self.registryValue('bugSnarfer', channel):
             return
         nbugs = msg.tagged('nbugs')
         if not nbugs: nbugs = 0
@@ -361,7 +362,7 @@ class Bugtracker(callbacks.PluginRegexp):
                 name = ''
                 pass
         if not name:
-            snarfTarget = self.registryValue('snarfTarget', msg.args[0]).lower()
+            snarfTarget = self.registryValue('snarfTarget', channel)
             if not snarfTarget:
                 self.log.warning("Bugtracker: no snarfTarget for Bugtracker")
                 return
@@ -379,7 +380,7 @@ class Bugtracker(callbacks.PluginRegexp):
             for bugid in bugids:
                 bugid = int(bugid)
                 try:
-                    report = self.get_bug(msg.args[0],tracker,bugid,self.registryValue('showassignee', msg.args[0]))
+                    report = self.get_bug(channel,tracker,bugid,self.registryValue('showassignee', channel))
                 except BugNotFoundError:
                     if self.registryValue('replyWhenNotFound'):
                         irc.error("%s bug %d could not be found" % (tracker.description, bugid))
@@ -396,7 +397,8 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def turlSnarfer(self, irc, msg, match):
         r"(?P<tracker>https?://\S*?)/(Bugs/0*|str.php\?L|show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|ticket/|tracker/|\S*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
-        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
+        channel = ircutils.isChannel(msg.args[0]) and msg.args[0] or None
+        if not self.registryValue('bugSnarfer', channel):
             return
         nbugs = msg.tagged('nbugs')
         if not nbugs: nbugs = 0
@@ -407,7 +409,7 @@ class Bugtracker(callbacks.PluginRegexp):
             tracker = self.get_tracker(match.group(0),match.group('sfurl'))
             if not tracker:
                 return
-            report = self.get_bug(msg.args[0],tracker,int(match.group('bug')),self.registryValue('showassignee', msg.args[0]), do_url = False)
+            report = self.get_bug(channel,tracker,int(match.group('bug')),self.registryValue('showassignee', channel), do_url = False)
         except BugtrackerError, e:
             irc.error(str(e))
         except BugNotFoundError, e:
@@ -420,25 +422,33 @@ class Bugtracker(callbacks.PluginRegexp):
     # Only useful for launchpad developers
     def oopsSnarfer(self, irc, msg, match):
         r"OOPS-(?P<oopsid>\d*[\dA-Z]+)"
-        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
+        channel = ircutils.isChannel(msg.args[0]) and msg.args[0] or None
+        if not self.registryValue('bugSnarfer', channel) or not self.registryValue('oopsSnarfer', channel):
             return
         oopsid = match.group(1)
         if oopsid.lower() == "tools":
+            return
+        if not self.is_ok(channel, 'lpoops', oopsid):
             return
         irc.reply("https://lp-oops.canonical.com/oops.py/?oopsid=%s" % oopsid, prefixNick=False)
         #irc.reply("https://devpad.canonical.com/~jamesh/oops.cgi/%s" % oopsid, prefixNick=False)
 
     def cveSnarfer(self, irc, msg, match):
         r"(cve[- ]\d{4}[- ]\d{4})"
-        if msg.args[0][0] == '#' and not self.registryValue('bugSnarfer', msg.args[0]):
+        channel = ircutils.isChannel(msg.args[0]) and msg.args[0] or None
+        if not self.registryValue('bugSnarfer', channel) or not self.registryValue('cveSnarfer', channel):
             return
         cve = match.group(1).replace(' ','-').upper()
+        if not self.is_ok(channel, 'cve', cve):
+            return
         url = 'http://cve.mitre.org/cgi-bin/cvename.cgi?name=%s' % cve
         cvedata = utils.web.getUrl(url)
         m = cvere.search(cvedata)
         if m:
             cve = m.group(1).replace('\n', ' ')
-            irc.reply("%s (%s)" % (cve,url))
+            if len(cve) > 380:
+                cve = cve[:380] + '...'
+            irc.reply("%s (%s)" % (cve,url), prefixNick=False)
 
     def cveUrlSnarfer(self, irc, msg, match):
         pass
