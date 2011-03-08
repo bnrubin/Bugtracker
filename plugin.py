@@ -417,7 +417,7 @@ class Bugtracker(callbacks.PluginRegexp):
         else:
             for r in report:
                 irc.reply(makeClean(r), prefixNick=False)
-    turlSnarfer = urlSnarfer(turlSnarfer)
+#    turlSnarfer = urlSnarfer(turlSnarfer)
 
     # Only useful for launchpad developers
     def oopsSnarfer(self, irc, msg, match):
