@@ -102,12 +102,12 @@ class Bugtracker(callbacks.PluginRegexp):
             if group.trackertype() in defined_bugtrackers.keys():
                 self.db[name] = defined_bugtrackers[group.trackertype()](name, group.url(), group.description())
             else:
-#                raise BugtrackerError("Unknown trackertype: %s (%s)" % (group.trackertype(), name))
                 self.log.warning("Bugtracker: Unknown trackertype: %s (%s)" % (group.trackertype(), name))
         self.shorthand = utils.abbrev(self.db.keys())
 
         # Schedule bug reporting
         self.shown = {}
+        #TODO: Remove everything below this line
         if self.registryValue('imap_server') and self.registryValue('reportercache'):
             try:
                 schedule.removeEvent(self.name() + '.bugreporter')
@@ -117,7 +117,7 @@ class Bugtracker(callbacks.PluginRegexp):
             self.events += [self.name() + '.bugreporter']
             self.log.info('Bugtracker: Adding scheduled event "%s.bugreporter"' % self.name())
 
-    def die(self):
+    def die(self): #TODO: Remove me
         try:
            for event in self.events:
                 self.log.info('Bugtracker: Removing scheduled event "%s"' % event)
@@ -127,6 +127,7 @@ class Bugtracker(callbacks.PluginRegexp):
             pass
 
     def is_ok(self, channel, tracker, bug):
+        '''Flood/repeat protection'''
         now = time.time()
         for k in self.shown.keys():
             if self.shown[k] < now - self.registryValue('repeatdelay', channel):
@@ -136,7 +137,7 @@ class Bugtracker(callbacks.PluginRegexp):
             return True
         return False
 
-    def is_new(self, tracker, tag, id):
+    def is_new(self, tracker, tag, id): #Depricated
         bugreporter_base = self.registryValue('reportercache')
         if not os.path.exists(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000)),str(id))):
             try:
@@ -148,7 +149,7 @@ class Bugtracker(callbacks.PluginRegexp):
             return True
         return False
 
-    def reportnewbugs(self,irc):
+    def reportnewbugs(self,irc): #Depricated
         # Compile list of bugs
         self.log.info("Bugtracker: Checking for new bugs")
         bugs = {}
@@ -417,7 +418,6 @@ class Bugtracker(callbacks.PluginRegexp):
         else:
             for r in report:
                 irc.reply(makeClean(r), prefixNick=False)
-#    turlSnarfer = urlSnarfer(turlSnarfer)
 
     # Only useful for launchpad developers
     def oopsSnarfer(self, irc, msg, match):
@@ -431,7 +431,6 @@ class Bugtracker(callbacks.PluginRegexp):
         if not self.is_ok(channel, 'lpoops', oopsid):
             return
         irc.reply("https://lp-oops.canonical.com/oops.py/?oopsid=%s" % oopsid, prefixNick=False)
-        #irc.reply("https://devpad.canonical.com/~jamesh/oops.cgi/%s" % oopsid, prefixNick=False)
 
     def cveSnarfer(self, irc, msg, match):
         r"(cve[- ]\d{4}[- ]\d{4})"
@@ -450,28 +449,30 @@ class Bugtracker(callbacks.PluginRegexp):
                 cve = cve[:380] + '...'
             irc.reply("%s (%s)" % (cve,url), prefixNick=False)
 
-    def cveUrlSnarfer(self, irc, msg, match):
-        pass
-
-    def get_tracker(self,snarfurl,sfdata):
+    def get_tracker(self, snarfurl, sfdata):
         snarfurl = snarfurl.replace('sf.net','sourceforge.net')
         snarfhost = snarfurl.replace('http://','').replace('https://','')
         if '/' in snarfurl:
             snarfhost = snarfhost[:snarfhost.index('/')]
         for t in self.db.keys():
-            tracker = self.db[t]
+            tracker = self.db.get(t, None)
+            if not tracker:
+                self.log.error("No tracker for key %r" % t)
+                continue
             url = tracker.url.replace('http://','').replace('https://','')
+
             if 'sourceforge.net' in url:
-                return None
-                # Try to find the correct sf tracker
-                if str(sfdata) in tracker.url:
-                    return tracker
+                # sourceforge.net has no API or structured bug exporting, HTML
+                # scraping is not good enough. Especially as SF keep changing it
+                continue
+
             if '/' in url:
                 url = url[:url.index('/')]
             if url in snarfhost:
                 return tracker
-        if 'sourceforge.net' in snarfurl:
-            return self.db['sourceforge']
+
+        if 'sourceforge.net' in snarfurl: # See above
+            return None
         # No tracker found, bummer. Let's try and add one
         if 'show_bug.cgi' in snarfurl:
             tracker = Bugzilla().get_tracker(snarfurl)
@@ -612,6 +613,9 @@ class Issuezilla(IBugtracker):
         return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
 
 class Launchpad(IBugtracker):
+    statuses = ["Unknown", "Invalid", "Opinion", "Won't Fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
+    severities = ["Unknown", "Undecided", "Wishlist", "Low", "Medium", "High", "Critical"]
+
     def __init__(self, *args, **kwargs):
         IBugtracker.__init__(self, *args, **kwargs)
         self.lp = None
@@ -626,67 +630,80 @@ class Launchpad(IBugtracker):
 
         try: # Attempt to use launchpadlib, python bindings for the Launchpad API
             from launchpadlib.launchpad import Launchpad
-            from launchpadlib.uris import LPNET_SERVICE_ROOT
             cachedir = os.path.join(conf.supybot.directories.data.tmp(), 'lpcache')
             if hasattr(Launchpad, 'login_anonymously'):
-                self.lp = Launchpad.login_anonymously("Ubuntu Bots - Bugtracker", LPNET_SERVICE_ROOT, cachedir)
-            else:
-                self.lp = Launchpad.login("Ubuntu Bots - Bugtracker", '', '', LPNET_SERVICE_ROOT, cahedir)
+                self.lp = Launchpad.login_anonymously("Ubuntu Bots - Bugtracker", 'production', cachedir)
+            else: #NOTE: Most people should have a launchpadlib new enough for .login_anonymously
+                self.lp = Launchpad.login("Ubuntu Bots - Bugtracker", '', '', 'production', cahedir)
         except ImportError:
             # Ask for launchpadlib to be installed
             supylog.warning("Please install python-launchpadlib, the old interface is deprecated")
         except Exception: # Something unexpected happened
             self.lp = None
-            supylog.error("Error accessing Launchpad API")
+            supylog.exception("Unknown exception while accessing the Launchpad API")
 
-    def _parse(self, task):
+    def _parse(self, task): #Depricated
         parser = email.FeedParser.FeedParser()
         parser.feed(task)
         return parser.close()
-    def _sort(self, task1, task2):
+
+    def get_bug(self, id): #TODO: Remove this method and rename 'get_new_bug' to 'get_bug'
+        if self.lp:
+            return self.get_bug_new(id)
+        return self.get_bug_old(id)
+
+    @classmethod
+    def _sort(cls, task1, task2):
+        task1_status = task1.status
+        task1_importance = task1.importance
+        task2_status = task2.status
+        task2_importance = task2.importance
+
+        if task1_status not in cls.statuses:
+            supylog.error("%r is an unknown status for Launchapd, update %s.statuses" % (task1_status, getattr(cls, '__name__', 'Launchpad')))
+            if task2_status not in cls.statuses:
+                supylog.error("%r is an unknown status for Launchapd, update %s.statuses" % (task1_status, getattr(cls, '__name__', 'Launchpad')))
+                return -1
+            return 1
+
+        if task1_importance not in cls.severities:
+            supylog.error("%r is an unknown status for Launchapd, update %s.severities" % (task1_importance, getattr(cls, '__name__', 'Launchpad')))
+            if task2_importance not in cls.severities:
+                supylog.error("%r is an unknown status for Launchapd, update %s.severities" % (task1_importance, getattr(cls, '__name__', 'Launchpad')))
+                return -1
+            return 1
+
+        if task1_status != task2_status:
+            if cls.statuses.index(task1_status) < cls.statuses.index(task2_status):
+                return -1
+            return 1
+        if task1_importance != task2_importance:
+            if cls.severities.index(task1_importance) < cls.severities.index(task2_importance):
+                return -1
+            return 1
+        return 0
+
+    @classmethod
+    def _old_sort(cls, task1, task2): #Depricated
         # Status sort: 
         try:
-            statuses = ["Unknown", "Invalid", "Won't Fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
-            severities = ["Unknown", "Undecided", "Wishlist", "Low", "Medium", "High", "Critical"]
-            if task1['status'] not in statuses and task2['status'] in statuses: return -1
-            if task1['status'] in statuses and task2['status'] not in statuses: return 1
-            if task1['importance'] not in severities and task2['importance'] in severities: return -1
-            if task1['importance'] in severities and task2['importance'] not in severities: return 1
+            if task1['status'] not in cls.statuses and task2['status'] in cls.statuses: return -1
+            if task1['status'] in cls.statuses and task2['status'] not in cls.statuses: return 1
+            if task1['importance'] not in cls.severities and task2['importance'] in cls.severities: return -1
+            if task1['importance'] in cls.severities and task2['importance'] not in cls.severities: return 1
             if not (task1['status'] == task2['status']):
-                if statuses.index(task1['status']) < statuses.index(task2['status']):
+                if cls.statuses.index(task1['status']) < cls.statuses.index(task2['status']):
                     return -1
                 return 1
             if not (task1['importance'] == task2['importance']):
-                if severities.index(task1['importance']) < severities.index(task2['importance']):
+                if cls.severities.index(task1['importance']) < cls.severities.index(task2['importance']):
                     return -1
                 return 1
         except: # Launchpad changed again?
             return 0
         return 0
 
-    def get_bug(self, id):
-        if self.lp:
-            return self.get_bug_new(id)
-        return self.get_bug_old(id)
-
-    def get_bug_new(self, id):
-        def _sort(task1, task2):
-            statuses = ["Unknown", "Invalid", "Won't Fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
-            severities = ["Unknown", "Undecided", "Wishlist", "Low", "Medium", "High", "Critical"]
-            task1_status = task1.status
-            task1_importance = task1.importance
-            task2_status = task2.status
-            task2_importance = task2.importance
-            if task1_status != task2_status:
-                if statuses.index(task1_status) < statuses.index(task2_status):
-                    return -1
-                return 1
-            if task1_importance != task2_importance:
-                if severities.index(task1_importance) < severities.index(task2_importance):
-                    return -1
-                return 1
-            return 0
-
+    def get_bug_new(self, id): #TODO: Rename this method to 'get_bug'
         try:
             bugdata = self.lp.bugs[id]
             if bugdata.private:
@@ -698,7 +715,7 @@ class Launchpad(IBugtracker):
 
             if tasks.total_size != 1:
                 tasks = list(tasks)
-                tasks.sort(_sort)
+                tasks.sort(self._sort)
                 taskdata = tasks[-1]
             else:
                 taskdata = tasks[0]
@@ -728,7 +745,7 @@ class Launchpad(IBugtracker):
         return [(id, t, bugdata.title, taskdata.importance, taskdata.status,
                 assignee, "%s/bugs/%s" % (self.url, id), extinfo)]
 
-    def get_bug_old(self, id):
+    def get_bug_old(self, id): #Depricated
         if id == 1:
             raise BugtrackerError, "https://bugs.launchpad.net/ubuntu/+bug/1 (Not reporting large bug)"
 
@@ -752,7 +769,7 @@ class Launchpad(IBugtracker):
             parser.feed(bugdata)
             bugdata = parser.close()
             taskdata = map(self._parse, taskdata)
-            taskdata.sort(self._sort)
+            taskdata.sort(self._old_sort)
             taskdata = taskdata[-1]
                 
         except Exception, e:
@@ -929,6 +946,7 @@ sfre = re.compile(r"""
                   resolution.*?<br>\s+(?P<resolution>\S+)
                   .*?
                   """, re.VERBOSE | re.DOTALL | re.I)
+#NOTE: Until sf.net has a way to export formatted bug data, this will remain broken and unmaintained
 class Sourceforge(IBugtracker):
     _sf_url = 'http://sf.net/support/tracker.php?aid=%d'
     def get_bug(self, id):
@@ -956,7 +974,6 @@ for k in v.keys():
         defined_bugtrackers[k.lower()] = v[k]
 
 registerBugtracker('mozilla', 'http://bugzilla.mozilla.org', 'Mozilla', 'bugzilla')
-#registerBugtracker('ubuntu', 'http://bugzilla.ubuntu.com', 'Ubuntu', 'bugzilla')
 registerBugtracker('ubuntu', 'https://launchpad.net', 'Ubuntu', 'launchpad')
 registerBugtracker('gnome', 'http://bugzilla.gnome.org', 'Gnome', 'bugzilla')
 registerBugtracker('gnome2', 'http://bugs.gnome.org', 'Gnome', 'bugzilla')
@@ -975,6 +992,7 @@ registerBugtracker('cups', 'http://www.cups.org/str.php', 'CUPS', 'str')
 registerBugtracker('gnewsense', 'http://bugs.gnewsense.org/Bugs', 'gNewSense', 'wikiforms')
 registerBugtracker('supybot', 'http://sourceforge.net/tracker/?group_id=58965&atid=489447', 'Supybot', 'sourceforge')
 registerBugtracker('mantis', "http://www.mantisbt.org/bugs", "Mantis", 'mantis')
+registerBugtracker('ubottu', 'https://launchpad.net' 'Ubottu', 'launchpad')
 # Don't delete this one
 registerBugtracker('sourceforge', 'http://sourceforge.net/tracker/', 'Sourceforge', 'sourceforge')
 Class = Bugtracker
