@@ -992,7 +992,7 @@ registerBugtracker('cups', 'http://www.cups.org/str.php', 'CUPS', 'str')
 registerBugtracker('gnewsense', 'http://bugs.gnewsense.org/Bugs', 'gNewSense', 'wikiforms')
 registerBugtracker('supybot', 'http://sourceforge.net/tracker/?group_id=58965&atid=489447', 'Supybot', 'sourceforge')
 registerBugtracker('mantis', "http://www.mantisbt.org/bugs", "Mantis", 'mantis')
-registerBugtracker('ubottu', 'https://launchpad.net' 'Ubottu', 'launchpad')
+registerBugtracker('ubottu', 'https://launchpad.net', 'Ubottu', 'launchpad')
 # Don't delete this one
 registerBugtracker('sourceforge', 'http://sourceforge.net/tracker/', 'Sourceforge', 'sourceforge')
 Class = Bugtracker
