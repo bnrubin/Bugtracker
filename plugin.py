@@ -736,6 +736,8 @@ class Launchpad(IBugtracker):
 #NOTE: The LP API will raise a lazr.restfulclient.errors.HTTPError with private bugs, so bugdata.private is useless..., do the checking here instead
             if e.__class__.__name__ == 'HTTPError': # messy, but meh
                 raise BugtrackerError, e.content # should be 'Bug nnnnn is private'
+            elif isinstance(e, KeyError):
+                raise BugNotFoundError
             supylog.exception("Error gathering bug data for %s bug %d" % (self.description, id))
             s = 'Could not parse data returned by %s: %s (%s/bugs/%d)' % (self.description, e, self.url, id)
             raise BugtrackerError, s
