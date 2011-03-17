@@ -397,7 +397,7 @@ class Bugtracker(callbacks.PluginRegexp):
                         irc.reply(makeClean(r), prefixNick=False)
 
     def turlSnarfer(self, irc, msg, match):
-        r"(?P<tracker>https?://\S*?)/(Bugs/0*|str.php\?L|show_bug.cgi\?id=|bugreport.cgi\?bug=|(bugs|\+bug)/|ticket/|tracker/|\S*aid=)(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
+        r"(?P<tracker>https?://\S*?)/(?:Bugs/0*|str.php\?L|show_bug.cgi\?id=|bugreport.cgi\?bug=|(?:bugs|\+bug)/|ticket/|tracker/|\S*aid=|bug=)?(?P<bug>\d+)(?P<sfurl>&group_id=\d+&at_id=\d+)?"
         channel = ircutils.isChannel(msg.args[0]) and msg.args[0] or None
         if not self.registryValue('bugSnarfer', channel):
             return
@@ -473,6 +473,10 @@ class Bugtracker(callbacks.PluginRegexp):
 
         if 'sourceforge.net' in snarfurl: # See above
             return None
+
+        if snarfhost == 'pad.lv': # Launchpad URL shortening
+            return self.db.get('lp', None)
+
         # No tracker found, bummer. Let's try and add one
         if 'show_bug.cgi' in snarfurl:
             tracker = Bugzilla().get_tracker(snarfurl)
