@@ -333,14 +333,24 @@ class Bugtracker(callbacks.PluginRegexp):
         s = str(msg).split(':')[2]
         if s and s[0] in str(conf.supybot.reply.whenAddressedBy.chars):
             return
+
         sure_bug = match.group('bt').endswith('bug') or match.group('bt').endswith('bug')
-        
+
         # Get tracker name
         bugids = match.group('bug')
         reps = ((' ',''),('#',''),('and',','),('en',','),('et',','),('und',','),('ir',','))
         for r in reps:
             bugids = bugids.replace(r[0],r[1])
         bugids = bugids.split(',')[:5-nbugs]
+
+        # Begin HACK
+        # strings like "ubuntu 1004" and "ubuntu 1010" are false triggers for us
+        # filter out bug number that are 4 numbers, start with '1' and end in '04' or '10
+        # (let's fix this for 2020 ;)
+        if match.group('bt').lower() == 'ubuntu':
+            bugids = filter(lambda bugnum: not (len(bugnum) == 4 and bugnum[0] == '1' and bugnum[2:] in ('04', '10')), bugids)
+        # End HACK
+
         if not sure_bug:
             bugids = [x for x in bugids if int(x) > 100]
         msg.tag('nbugs', nbugs + len(bugids))
@@ -421,7 +431,7 @@ class Bugtracker(callbacks.PluginRegexp):
 
     # Only useful for launchpad developers
     def oopsSnarfer(self, irc, msg, match):
-        r"OOPS-(?P<oopsid>\d*[\dA-Z]+)"
+        r"(?:https?://pad.lv/){0}?OOPS-(?P<oopsid>\d*[\dA-Z]{3,})"
         channel = ircutils.isChannel(msg.args[0]) and msg.args[0] or None
         if not self.registryValue('bugSnarfer', channel) or not self.registryValue('oopsSnarfer', channel):
             return
@@ -430,7 +440,7 @@ class Bugtracker(callbacks.PluginRegexp):
             return
         if not self.is_ok(channel, 'lpoops', oopsid):
             return
-        irc.reply("https://lp-oops.canonical.com/oops.py/?oopsid=%s" % oopsid, prefixNick=False)
+        irc.reply('https://lp-oops.canonical.com/oops.py/?oopsid=' + oopsid, prefixNick=False)
 
     def cveSnarfer(self, irc, msg, match):
         r"(cve[- ]\d{4}[- ]\d{4})"
@@ -449,11 +459,33 @@ class Bugtracker(callbacks.PluginRegexp):
                 cve = cve[:380] + '...'
             irc.reply("%s (%s)" % (cve,url), prefixNick=False)
 
+#TODO: as we will depend on launchpadlib, we should consider using lazr.uri.URI to do URL parsing
     def get_tracker(self, snarfurl, sfdata):
         snarfurl = snarfurl.replace('sf.net','sourceforge.net')
         snarfhost = snarfurl.replace('http://','').replace('https://','')
+
+        # Begin HACK
+        # launchpad.net has many URLs that can confuse us
+        # make sure 'bug' in in the URL, somewhere
+        if 'launchpad' in snarfhost:
+            if not 'bug' in snarfhost: # Not a bug URL
+                return None
+
+        if snarfhost.startswith('pad.lv'): # Launchpad URL shortening
+            # pad.lv//12345 would give us "pad.lv/", so remove dups
+            snarfhost = '/'.join( (_ for _ in snarfhost.split('/') if _) )
+            if '/' in snarfhost: # it's not a bug URL
+                return None
+            return self.db.get('lp', None)
+        # End HACK
+
+        # At this point, we are only interested in the host part of the URL
         if '/' in snarfurl:
             snarfhost = snarfhost[:snarfhost.index('/')]
+
+        if 'sourceforge.net' in snarfurl: # See below
+            return None
+
         for t in self.db.keys():
             tracker = self.db.get(t, None)
             if not tracker:
@@ -470,9 +502,6 @@ class Bugtracker(callbacks.PluginRegexp):
                 url = url[:url.index('/')]
             if url in snarfhost:
                 return tracker
-
-        if 'sourceforge.net' in snarfurl: # See above
-            return None
 
         if snarfhost == 'pad.lv': # Launchpad URL shortening
             return self.db.get('lp', None)
