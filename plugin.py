@@ -472,11 +472,11 @@ class Bugtracker(callbacks.PluginRegexp):
                 return None
 
         if snarfhost.startswith('pad.lv'): # Launchpad URL shortening
-            # pad.lv//12345 would give us "pad.lv/", so remove dups
+            snarfhost = snarfhost[:snarfhost.rfind('/')]
             snarfhost = '/'.join( (_ for _ in snarfhost.split('/') if _) )
             if '/' in snarfhost: # it's not a bug URL
                 return None
-            return self.db.get('lp', None)
+            return self.db.get('launchpad', None)
         # End HACK
 
         # At this point, we are only interested in the host part of the URL
