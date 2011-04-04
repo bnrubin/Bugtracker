@@ -353,6 +353,9 @@ class Bugtracker(callbacks.PluginRegexp):
 
         if not sure_bug:
             bugids = [x for x in bugids if int(x) > 100]
+
+        bugids = list(set(bugids)) ## remove dups
+
         msg.tag('nbugs', nbugs + len(bugids))
         bt = map(lambda x: x.lower(), match.group('bt').split())
         # Strip off trailing ':' from the tracker name. Allows for (LP: #nnnnnn)
@@ -420,7 +423,7 @@ class Bugtracker(callbacks.PluginRegexp):
             tracker = self.get_tracker(match.group(0),match.group('sfurl'))
             if not tracker:
                 return
-            report = self.get_bug(channel,tracker,int(match.group('bug')),self.registryValue('showassignee', channel), do_url = False)
+            report = self.get_bug(channel, tracker, int(match.group('bug')), self.registryValue('showassignee', channel), do_url = False)
         except BugtrackerError, e:
             irc.error(str(e))
         except BugNotFoundError, e:
@@ -517,9 +520,9 @@ class Bugtracker(callbacks.PluginRegexp):
 
     def get_bug(self, channel, tracker, id, do_assignee, do_url = True):
         reports = []
+        if not self.is_ok(channel, tracker, id):
+            return []
         for r in tracker.get_bug(id):
-            if not self.is_ok(channel, tracker, r[0]):
-                continue
             showext = self.registryValue('extended', channel)
             extinfo = ''
             if len(r) == 8:
@@ -553,6 +556,7 @@ class IBugtracker:
         self.name        = name
         self.url         = url
         self.description = description
+        self.log         = supylog # Convenience log wrapper
 
     def get_bug(self, id):
         raise BugTrackerError("Bugtracker class does not implement get_bug")
@@ -561,7 +565,13 @@ class IBugtracker:
         raise BugTrackerError("Bugtracker class does not implement get_tracker")
 
     def __str__(self):
-        return self.__class__.__name__
+        return '%s(%s)' % (self.__class__.__name__, self.url)
+
+    def __hash__(self):
+        return hash(self.url)
+
+    def __cmp__(self, other): # used implicitly in Bugtracker.is_ok()
+        return cmp(hash(self), hash(other))
 
 class Bugzilla(IBugtracker):
     def get_tracker(self, url):
