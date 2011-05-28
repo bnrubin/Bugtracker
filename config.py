@@ -1,7 +1,7 @@
 # -*- Encoding: utf-8 -*-
 ###
 # Copyright (c) 2005-2007 Dennis Kaarsemaker
-# Copyright (c) 2008-2010 Terence Simpson
+# Copyright (c) 2008-2011 Terence Simpson
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -45,13 +45,14 @@ def configure(advanced):
         else:
             return repeatdelay
 
+    output("Each of the next 3 questions can be set per-channel with the '@Config channel' command")
     bugSnarfer = yn("Enable detecting bugs numbers and URL in all channels?", default=Bugtracker.bugSnarfer._default)
     cveSnarfer = yn("Enable detecting CVE numbers and URL in all channels?", default=Bugtracker.cveSnarfer._default)
     oopsSnarfer = yn("Enable detecting Launchpad OOPS IDs in all channels?", default=Bugtracker.oopsSnarfer._default)
     if advanced:
         replyNoBugtracker = something("What should the bot reply with when a a user requests information from an unknown bug tracker?", default=Bugtracker.replyNoBugtracker._default)
         snarfTarget = something("What should be the default bug tracker used when one isn't specified?", default=Bugtracker.snarfTarget._default)
-        replyWhenNotFound = yn("Respond when a bug is not found?", default=Bugtracker.replyWhenNotFound._default)
+        replyWhenNotFound = yn("Should the bot report when a bug is not found?", default=Bugtracker.replyWhenNotFound._default)
         repeatdelay = getRepeatdelay()
     else:
         replyNoBugtracker = Bugtracker.replyNoBugtracker._default
@@ -89,8 +90,8 @@ conf.registerChannelValue(Bugtracker, 'oopsSnarfer',
     enabled, such that any OOPS ### seen in the channel
     will have their information reported into the channel."""))
 
-conf.registerChannelValue(Bugtracker, 'bugReporter',
-    registry.String('', """Report new bugs (experimental)"""))
+#conf.registerChannelValue(Bugtracker, 'bugReporter',
+#    registry.String('', """Report new bugs (experimental)"""))
 
 conf.registerChannelValue(Bugtracker, 'replyNoBugtracker',
     registry.String('I don\'t have a bugtracker %s.', """Determines the phrase
@@ -98,7 +99,7 @@ conf.registerChannelValue(Bugtracker, 'replyNoBugtracker',
     bugtracker site."""))
 
 conf.registerChannelValue(Bugtracker, 'snarfTarget',
-    registry.String('lp', """Determines the bugtracker to query when the
+    registry.String('launchpad', """Determines the bugtracker to query when the
     snarf command is triggered"""))
 
 conf.registerGlobalValue(Bugtracker, 'bugtrackers',
@@ -117,18 +118,18 @@ conf.registerChannelValue(Bugtracker, 'showassignee',
 conf.registerChannelValue(Bugtracker, 'extended',
     registry.Boolean(False, "Show optional extneded bug information, specific to trackers"))
     
-conf.registerGlobalValue(Bugtracker, 'reportercache',
-    registry.String('', """Name of the basedir for the bugreporter cache""", private=True))
+#conf.registerGlobalValue(Bugtracker, 'reportercache',
+#    registry.String('', """Name of the basedir for the bugreporter cache""", private=True))
 
-conf.registerGlobalValue(Bugtracker, 'imap_server',
-    registry.String('', """IMAP server for bugmail account""",private=True))
+#conf.registerGlobalValue(Bugtracker, 'imap_server',
+#    registry.String('', """IMAP server for bugmail account""",private=True))
 
-conf.registerGlobalValue(Bugtracker, 'imap_user',
-    registry.String('', """IMAP user for bugmail account""", private=True))
+#conf.registerGlobalValue(Bugtracker, 'imap_user',
+#    registry.String('', """IMAP user for bugmail account""", private=True))
 
-conf.registerGlobalValue(Bugtracker, 'imap_password',
-    registry.String('', """IMAP password for bugmail account""", private=True))
+#conf.registerGlobalValue(Bugtracker, 'imap_password',
+#    registry.String('', """IMAP password for bugmail account""", private=True))
 
-conf.registerGlobalValue(Bugtracker, 'imap_ssl',
-    registry.Boolean(False, """Use SSL for imap connections""", private=True))
+#conf.registerGlobalValue(Bugtracker, 'imap_ssl',
+#    registry.Boolean(False, """Use SSL for imap connections""", private=True))
 

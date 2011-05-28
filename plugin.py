@@ -24,13 +24,15 @@ import supybot.registry as registry
 import supybot.schedule as schedule
 import supybot.log as supylog
 
-import re, os, time, imaplib, commands
+#import imaplib
+import re, os, time, commands
 import xml.dom.minidom as minidom
 from htmlentitydefs import entitydefs as entities
 import email.FeedParser
 import SOAPpy
 
-bad_words = ["fuck","fuk","fucking","fuking","fukin","fuckin","fucked","fuked","fucker","shit","cunt","bastard","nazi","nigger","nigga","cock","bitches","bitch"]
+# All the words below will be censored when reporting bug information
+bad_words = set(["fuck","fuk","fucking","fuking","fukin","fuckin","fucked","fuked","fucker","shit","cunt","bastard","nazi","nigger","nigga","cock","bitches","bitch"])
 
 def makeClean(s):
     words = s.split()
@@ -95,7 +97,7 @@ class Bugtracker(callbacks.PluginRegexp):
     def __init__(self, irc):
         callbacks.PluginRegexp.__init__(self, irc)
         self.db = ircutils.IrcDict()
-        events = []
+#        self.events = []
         for name in self.registryValue('bugtrackers'):
             registerBugtracker(name)
             group = self.registryValue('bugtrackers.%s' % name.replace('.','\\.'), value=False)
@@ -104,27 +106,28 @@ class Bugtracker(callbacks.PluginRegexp):
             else:
                 self.log.warning("Bugtracker: Unknown trackertype: %s (%s)" % (group.trackertype(), name))
         self.shorthand = utils.abbrev(self.db.keys())
-
-        # Schedule bug reporting
         self.shown = {}
-        #TODO: Remove everything below this line
-        if self.registryValue('imap_server') and self.registryValue('reportercache'):
-            try:
-                schedule.removeEvent(self.name() + '.bugreporter')
-            except:
-                pass
-            schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name() + '.bugreporter')
-            self.events += [self.name() + '.bugreporter']
-            self.log.info('Bugtracker: Adding scheduled event "%s.bugreporter"' % self.name())
+
+#        # Schedule bug reporting
+#        #TODO: Remove everything below this line
+#        if self.registryValue('imap_server') and self.registryValue('reportercache'):
+#            try:
+#                schedule.removeEvent(self.name() + '.bugreporter')
+#            except:
+#                pass
+#            schedule.addPeriodicEvent(lambda: self.reportnewbugs(irc),  60, name=self.name() + '.bugreporter')
+#            self.events += [self.name() + '.bugreporter']
+#            self.log.info('Bugtracker: Adding scheduled event "%s.bugreporter"' % self.name())
 
     def die(self): #TODO: Remove me
-        try:
-           for event in self.events:
-                self.log.info('Bugtracker: Removing scheduled event "%s"' % event)
-                schedule.removeEvent(event)
-                schedule.removeEvent(self.name())
-        except:
-            pass
+        pass
+#        try:
+#           for event in self.events:
+#                self.log.info('Bugtracker: Removing scheduled event "%s"' % event)
+#                schedule.removeEvent(event)
+#                schedule.removeEvent(self.name())
+#        except:
+#            pass
 
     def is_ok(self, channel, tracker, bug):
         '''Flood/repeat protection'''
@@ -138,95 +141,97 @@ class Bugtracker(callbacks.PluginRegexp):
         return False
 
     def is_new(self, tracker, tag, id): #Depricated
-        bugreporter_base = self.registryValue('reportercache')
-        if not os.path.exists(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000)),str(id))):
-            try:
-                os.makedirs(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000))))
-            except:
-                pass
-            fd = open(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000)),str(id)),'w')
-            fd.close()
-            return True
-        return False
+        pass
+#        bugreporter_base = self.registryValue('reportercache')
+#        if not os.path.exists(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000)),str(id))):
+#            try:
+#                os.makedirs(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000))))
+#            except:
+#                pass
+#            fd = open(os.path.join(bugreporter_base,tag,tracker.name,str(int(id/1000)),str(id)),'w')
+#            fd.close()
+#            return True
+#        return False
 
     def reportnewbugs(self,irc): #Depricated
-        # Compile list of bugs
-        self.log.info("Bugtracker: Checking for new bugs")
-        bugs = {}
-        if self.registryValue('imap_ssl'):
-            sc = imaplib.IMAP4_SSL(self.registryValue('imap_server'))
-        else:
-            sc = imaplib.IMAP4(self.registryValue('imap_server'))
-        sc.login(self.registryValue('imap_user'), self.registryValue('imap_password'))
-        sc.select('INBOX')
-        new_mail = sc.search(None, '(UNSEEN)')[1][0].split()[:20]
-
-        # Read all new mail
-        for m in new_mail:
-            msg = sc.fetch(m, 'RFC822')[1][0][1]
-            fp = email.FeedParser.FeedParser()
-            sc.store(m, '+FLAGS', "(\Deleted)") # Mark message deleted so we don't have to process it again
-            fp.feed(msg)
-            bug = fp.close()
-            tag = None
-
-            if 'X-Launchpad-Bug' not in bug.keys():
-                self.log.info('Bugtracker: Ignoring e-mail with no detectable bug (Not from Launchpad)')            
-                continue
-            else:
-                tag = bug['X-Launchpad-Bug']
-                if 'distribution=' not in tag and 'product=' not in tag:
-                    self.log.info('Bugtracker: Ignoring e-mail with no detectable bug (no distro/product)')
-                    continue
-                else:
-                    tag = tag.split(';')[0].strip().replace("product=",'').replace("distribution=","")
-
-            if not tag:
-                self.log.info('Bugtracker: Ignoring e-mail with no detectible bug (bad tag)')
-                
-            tag = tag[tag.find('+')+1:tag.find('@')]
-            if tag not in bugs:
-                bugs[tag] = {}
-
-            # Determine bugtracker type (currently only Launchpad is supported anyway)
-            if bug['X-Launchpad-Bug']:
-                tracker = self.db['launchpad']
-                id = int(bug['Reply-To'].split()[1])
-                subj = bug['Subject'];
-                if '[NEW]' not in subj: #Not a new bug
-                    continue
-                if self.is_new(tracker, tag, id):
-                    component = bug['X-Launchpad-Bug']
-                    if 'component' in component:
-                        component = component[component.find('component=')+10:]
-                        component = component[:component.find(';')].replace('None','')
-                    else:
-                        component = ''
-                    try:
-                        if component:
-                            bugs[tag][id] = self.get_bug('',tracker, id, False)[0].replace('"','(%s) "' % component, 1)
-                        else:
-                            bugs[tag][id] = self.get_bug('',tracker, id, False)[0]
-                        if '[apport]' in bugs[tag][id]:
-                            bugs[tag].pop(id)
-                    except:
-                        self.log.info("Bugtracker: Unable to get new bug %d" % id)
-                        pass
-            else:
-                self.log.info('Bugtracker: Ignoring e-mail with no detectable bug')
-
-        reported_bugs = 0
-
-        for c in irc.state.channels:
-            tags = self.registryValue('bugReporter', channel=c)
-            if not tags:
-                continue
-            for tag in tags.split(','):
-                if not tag or tag not in bugs.keys():
-                    continue
-                for b in sorted(bugs[tag].keys()):
-                    irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[tag][b][bugs[tag][b].find('bug ')+4:]))
-                    reported_bugs = reported_bugs+1
+        pass
+#        # Compile list of bugs
+#        self.log.info("Bugtracker: Checking for new bugs")
+#        bugs = {}
+#        if self.registryValue('imap_ssl'):
+#            sc = imaplib.IMAP4_SSL(self.registryValue('imap_server'))
+#        else:
+#            sc = imaplib.IMAP4(self.registryValue('imap_server'))
+#        sc.login(self.registryValue('imap_user'), self.registryValue('imap_password'))
+#        sc.select('INBOX')
+#        new_mail = sc.search(None, '(UNSEEN)')[1][0].split()[:20]
+#
+#        # Read all new mail
+#        for m in new_mail:
+#            msg = sc.fetch(m, 'RFC822')[1][0][1]
+#            fp = email.FeedParser.FeedParser()
+#            sc.store(m, '+FLAGS', "(\Deleted)") # Mark message deleted so we don't have to process it again
+#            fp.feed(msg)
+#            bug = fp.close()
+#            tag = None
+#
+#            if 'X-Launchpad-Bug' not in bug.keys():
+#                self.log.info('Bugtracker: Ignoring e-mail with no detectable bug (Not from Launchpad)')            
+#                continue
+#            else:
+#                tag = bug['X-Launchpad-Bug']
+#                if 'distribution=' not in tag and 'product=' not in tag:
+#                   self.log.info('Bugtracker: Ignoring e-mail with no detectable bug (no distro/product)')
+#                    continue
+#                else:
+#                    tag = tag.split(';')[0].strip().replace("product=",'').replace("distribution=","")
+#
+#            if not tag:
+#                self.log.info('Bugtracker: Ignoring e-mail with no detectible bug (bad tag)')
+#
+#            tag = tag[tag.find('+')+1:tag.find('@')]
+#            if tag not in bugs:
+#                bugs[tag] = {}
+#
+#            # Determine bugtracker type (currently only Launchpad is supported anyway)
+#            if bug['X-Launchpad-Bug']:
+#                tracker = self.db['launchpad']
+#                id = int(bug['Reply-To'].split()[1])
+#                subj = bug['Subject'];
+#                if '[NEW]' not in subj: #Not a new bug
+#                    continue
+#                if self.is_new(tracker, tag, id):
+#                    component = bug['X-Launchpad-Bug']
+#                    if 'component' in component:
+#                        component = component[component.find('component=')+10:]
+#                        component = component[:component.find(';')].replace('None','')
+#                    else:
+#                        component = ''
+#                    try:
+#                        if component:
+#                            bugs[tag][id] = self.get_bug('',tracker, id, False)[0].replace('"','(%s) "' % component, 1)
+#                        else:
+#                            bugs[tag][id] = self.get_bug('',tracker, id, False)[0]
+#                        if '[apport]' in bugs[tag][id]:
+#                            bugs[tag].pop(id)
+#                    except:
+#                        self.log.info("Bugtracker: Unable to get new bug %d" % id)
+#                        pass
+#            else:
+#                self.log.info('Bugtracker: Ignoring e-mail with no detectable bug')
+#
+#        reported_bugs = 0
+#
+#        for c in irc.state.channels:
+#            tags = self.registryValue('bugReporter', channel=c)
+#            if not tags:
+#                continue
+#            for tag in tags.split(','):
+#                if not tag or tag not in bugs.keys():
+#                    continue
+#                for b in sorted(bugs[tag].keys()):
+#                    irc.queueMsg(ircmsgs.privmsg(c,'New bug: #%s' % bugs[tag][b][bugs[tag][b].find('bug ')+4:]))
+#                    reported_bugs = reported_bugs+1
 
     def add(self, irc, msg, args, name, trackertype, url, description):
         """<name> <type> <url> [<description>]
@@ -359,18 +364,18 @@ class Bugtracker(callbacks.PluginRegexp):
         msg.tag('nbugs', nbugs + len(bugids))
         bt = map(lambda x: x.lower(), match.group('bt').split())
         # Strip off trailing ':' from the tracker name. Allows for (LP: #nnnnnn)
-        if len(bt) and bt[0].endswith(':'):
+        if bt and bt[0].endswith(':'):
             bt[0] = bt[:-1]
         name = ''
         if len(bt) == 1 and not (bt[0] in ['bug','bugs']):
             try:
-                name = bt[0].lower()
+                name = bt[0]
                 tracker = self.db[name]
             except:
                 return
         elif len(bt) == 2:
             try:
-                name = bt[0].lower()
+                name = bt[0]
                 tracker = self.db[name]
             except:
                 name = ''
