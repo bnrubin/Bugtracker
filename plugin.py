@@ -578,6 +578,9 @@ class IBugtracker:
     def __cmp__(self, other): # used implicitly in Bugtracker.is_ok()
         return cmp(hash(self), hash(other))
 
+    def __str__(self):
+        return self.name
+
 class Bugzilla(IBugtracker):
     def get_tracker(self, url):
         url = url.replace('show_bug','xml')
