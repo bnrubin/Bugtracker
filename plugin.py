@@ -404,9 +404,9 @@ class Bugtracker(callbacks.PluginRegexp):
                     if self.registryValue('replyWhenNotFound'):
                         irc.error("%s bug %d could not be found" % (tracker.description, bugid))
                 except BugtrackerError, e:
-                    if 'private' in str(e):
-                        irc.reply("Bug %d on http://launchpad.net/bugs/%d is private" % (bugid, bugid))
-                        return
+#                    if 'private' in str(e):
+#                        irc.reply("Bug %d on http://launchpad.net/bugs/%d is private" % (bugid, bugid))
+#                        return
                     if not sure_bug and bugid < 30:
                         return
                     irc.error(str(e))
@@ -760,6 +760,12 @@ class Launchpad(IBugtracker):
             if bugdata.private:
                 raise BugtrackerError, "This bug is private"
             dup = bugdata.duplicate_of
+            summary_prefix = '' # Used to made dups easier
+            while dup:
+                summary_prefix = 'duplicate for #%d ' % id
+                bugdata = dup
+                dup = bugdata.duplicate_of
+
             affected = bugdata.users_affected_count_with_dupes
             heat = bugdata.heat
             tasks = bugdata.bug_tasks
@@ -780,23 +786,24 @@ class Launchpad(IBugtracker):
                 assignee = ''
 
         except Exception, e:
-#NOTE: The LP API will raise a lazr.restfulclient.errors.HTTPError with private bugs, so bugdata.private is useless..., do the checking here instead
-            if e.__class__.__name__ == 'HTTPError': # messy, but meh
-                raise BugtrackerError, e.content # should be 'Bug nnnnn is private'
+            if type(e).__name__ == 'HTTPError': # messy, but saves trying to import lazr.restfulclient.errors.HTPError
+                if e.response.status == 404:
+                    bugNo = e.content.split(None)[-1][2:-1] # extract the real bug number
+                    if bugNo != str(id): # A duplicate of a private bug, at least we know it exists
+                        raise BugtrackerError, 'Bug #%s is a duplicate of bug #%s, but it is private (%s/bugs/%s)' % (id, bugNo, self.url, bugNo)
+                    raise BugtrackerError, "Bug #%s (%s/bugs/%d) is private or doesn't exist" % (id, self.url, id) # Could be private, could just not exist
+
+                supylog.exception("Error gathering bug data for %s bug #%d" % (self.description, id))
+                raise BugtrackerError, "Could not gather data from %s for bug #%s (%s/bugs/%s). The error has been logged" % (self.description, id, self.url, id)
             elif isinstance(e, KeyError):
                 raise BugNotFoundError
             supylog.exception("Error gathering bug data for %s bug %d" % (self.description, id))
-            s = 'Could not parse data returned by %s: %s (%s/bugs/%d)' % (self.description, e, self.url, id)
-            raise BugtrackerError, s
+            raise BugtrackerError, "Could not gather data from %s for bug #%s (%s/bugs/%s). The error has been logged" % (self.description, id, self.url, id)
 
         extinfo = "(affected: %d, heat: %d)" % (affected, heat)
 
-        if dup:
-            dupbug = self.get_bug(dup.id)
-            return [(id, t, bugdata.title + (' (dup-of: %d)' % dup.id), taskdata.importance,
-                    taskdata.status, assignee, "%s/bugs/%s" % (self.url, id))] + dupbug
-        return [(id, t, bugdata.title, taskdata.importance, taskdata.status,
-                assignee, "%s/bugs/%s" % (self.url, id), extinfo)]
+        return [(bugdata.id, t, summary_prefix + bugdata.title, taskdata.importance, taskdata.status,
+                assignee, "%s/bugs/%s" % (self.url, bugdata.id), extinfo)]
 
     def get_bug_old(self, id): #Depricated
         if id == 1:
@@ -832,10 +839,16 @@ class Launchpad(IBugtracker):
         t = taskdata['task']
         if '(' in t:
             t = t[:t.rfind('(') -1]
-        if bugdata['duplicate-of']:
-            dupbug = self.get_bug(int(bugdata['duplicate-of']))
-            return [(id, t, bugdata['title'] + (' (dup-of: %d)' % dupbug[0][0]), taskdata['importance'], 
-                    taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url, id))] + dupbug
+        if bugdata['duplicate-of']: # This will suck if for dup of dups..., but +text is pure suck anyway
+            bugNo = bugdata['duplicate-of']
+            try:
+                data = self.get_bug(int(bugdata['duplicate-of']))
+            except Exception, e:
+                if '404' in str(e):
+                    raise BugtrackerError, 'Bug #%s is a duplicate of Bug #%s, but it is private. (%s/bugs/%s)' % (id, bugNo, self.url, bugNo)
+            data = list(data[0])
+            data[2] = ('duplicate for #%d ' % id) + data[2]
+            return [tuple(data)]
         return [(id, t, bugdata['title'], taskdata['importance'], 
                 taskdata['status'], taskdata['assignee'], "%s/bugs/%s" % (self.url, id))]
             
