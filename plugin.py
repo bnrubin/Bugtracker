@@ -772,8 +772,22 @@ class Launchpad(IBugtracker):
 
             if tasks.total_size != 1:
                 tasks = list(tasks)
-                tasks.sort(self._sort)
-                taskdata = tasks[-1]
+                try:
+                    tasks.sort(self._sort)
+                    taskdata = tasks[-1]
+                except ValueError:
+                    tasks = [_ for _ in tasks if _.bug_target_name.endswith(u'(Ubuntu)')]
+                    if tasks:
+                        if len(tasks) != 1:
+                            try:
+                                tasks.sort(self._sort)
+                                taskdata = tasks[-1]
+                            except ValueError:
+                                taskdata = bugdata.bug_tasks[bugdata.bug_tasks.total_size - 1]
+                        else:
+                            taskdata = tasks[-1]
+                    else:
+                        taskdata = tasks[-1]
             else:
                 taskdata = tasks[0]
 
