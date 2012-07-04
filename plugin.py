@@ -63,6 +63,8 @@ def _getnodetxt(node):
     for childnode in node.childNodes:
         if childnode.nodeType == childnode.TEXT_NODE:
             L.append(childnode.data)
+    if not L:
+        raise ValueError, "No text nodes"
     val = ''.join(L)
     if node.hasAttribute('encoding'):
         encoding = node.getAttribute('encoding')
@@ -583,7 +585,7 @@ class IBugtracker:
 
 class Bugzilla(IBugtracker):
     def get_tracker(self, url):
-        url = url.replace('show_bug','xml')
+        url += '&ctype=xml'
         try:
             bugxml = utils.web.getUrl(url)
             tree = minidom.parseString(bugxml)
@@ -600,7 +602,7 @@ class Bugzilla(IBugtracker):
         except:
             return None
     def get_bug(self, id):
-        url = "%s/xml.cgi?id=%d" % (self.url,id)
+        url = "%s/show_bug.cgi?id=%d&ctype=xml" % (self.url,id)
         try:
             bugxml = utils.web.getUrl(url)
             zilladom = minidom.parseString(bugxml)
@@ -618,7 +620,7 @@ class Bugzilla(IBugtracker):
             title = _getnodetxt(bug_n.getElementsByTagName('short_desc')[0])
             status = _getnodetxt(bug_n.getElementsByTagName('bug_status')[0])
             try:
-                status += ": " + _getnodetxt(bug_n.getElementsByTagName('resolution')[0])
+                status = "%s: %s" % (status, _getnodetxt(bug_n.getElementsByTagName('resolution')[0]))
             except:
                 pass
             component = _getnodetxt(bug_n.getElementsByTagName('component')[0])
@@ -633,35 +635,37 @@ class Bugzilla(IBugtracker):
             raise BugtrackerError, s
         return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
 
-class Issuezilla(IBugtracker):
-    def get_bug(self, id):
-        url = "%s/xml.cgi?id=%d" % (self.url,id)
-        try:
-            bugxml = utils.web.getUrl(url)
-            zilladom = minidom.parseString(bugxml)
-        except Exception, e:
-            s = 'Could not parse XML returned by %s: %s (%s)' % (self.description, e, url)
-            raise BugtrackerError, s
-        bug_n = zilladom.getElementsByTagName('issue')[0]
-        if not (bug_n.getAttribute('status_code') == '200'):
-            if bug_n.getAttribute('status_message') == 'NotFound':
-                raise BugNotFoundError
-            s = 'Error getting %s bug #%s: %s' % (self.description, id, bug_n.getAttribute('status_message'))
-            raise BugtrackerError, s
-        try:
-            title = _getnodetxt(bug_n.getElementsByTagName('short_desc')[0])
-            status = _getnodetxt(bug_n.getElementsByTagName('issue_status')[0])
-            try:
-                status += ": " + _getnodetxt(bug_n.getElementsByTagName('resolution')[0])
-            except:
-                pass
-            component = _getnodetxt(bug_n.getElementsByTagName('component')[0])
-            severity = _getnodetxt(bug_n.getElementsByTagName('issue_type')[0])
-            assignee = _getnodetxt(bug_n.getElementsByTagName('assigned_to')[0])
-        except Exception, e:
-            s = 'Could not parse XML returned by %s bugzilla: %s (%s)' % (self.description, e, url)
-            raise BugtrackerError, s
-        return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
+class Issuezilla(Bugzilla):
+    pass
+#class Issuezilla(IBugtracker):
+#    def get_bug(self, id):
+#        url = "%s/show_bug.cgi?id=%d&ctype=xml" % (self.url,id)
+#        try:
+#            bugxml = utils.web.getUrl(url)
+#            zilladom = minidom.parseString(bugxml)
+#        except Exception, e:
+#            s = 'Could not parse XML returned by %s: %s (%s)' % (self.description, e, url)
+#            raise BugtrackerError, s
+#        bug_n = zilladom.getElementsByTagName('issue')[0]
+#        if not (bug_n.getAttribute('status_code') == '200'):
+#            if bug_n.getAttribute('status_message') == 'NotFound':
+#                raise BugNotFoundError
+#            s = 'Error getting %s bug #%s: %s' % (self.description, id, bug_n.getAttribute('status_message'))
+#            raise BugtrackerError, s
+#        try:
+#            title = _getnodetxt(bug_n.getElementsByTagName('short_desc')[0])
+#            status = _getnodetxt(bug_n.getElementsByTagName('issue_status')[0])
+#            try:
+#                status = "%s: %s" % (status, _getnodetxt(bug_n.getElementsByTagName('resolution')[0]))
+#            except:
+#                pass
+#            component = _getnodetxt(bug_n.getElementsByTagName('component')[0])
+#            severity = _getnodetxt(bug_n.getElementsByTagName('issue_type')[0])
+#            assignee = _getnodetxt(bug_n.getElementsByTagName('assigned_to')[0])
+#        except Exception, e:
+#            s = 'Could not parse XML returned by %s bugzilla: %s (%s)' % (self.description, e, url)
+#            raise BugtrackerError, s
+#        return [(id, component, title, severity, status, assignee, "%s/show_bug.cgi?id=%d" % (self.url, id))]
 
 class Launchpad(IBugtracker):
     statuses = ["Unknown", "Invalid", "Opinion", "Won't Fix", "Fix Released", "Fix Committed", "New", "Incomplete", "Confirmed", "Triaged", "In Progress"]
