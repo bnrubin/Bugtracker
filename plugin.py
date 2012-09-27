@@ -480,6 +480,8 @@ class Bugtracker(callbacks.PluginRegexp):
         if 'launchpad' in snarfhost:
             if not 'bug' in snarfhost: # Not a bug URL
                 return None
+            if snarfhost.lower().startswith("code."):
+                return None
 
         if snarfhost.startswith('pad.lv'): # Launchpad URL shortening
             snarfhost = snarfhost[:snarfhost.rfind('/')]
