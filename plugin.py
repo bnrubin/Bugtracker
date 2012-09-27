@@ -327,7 +327,7 @@ class Bugtracker(callbacks.PluginRegexp):
     list = wrap(list, [additional('text')])
 
     def bugSnarfer(self, irc, msg, match):
-        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+):?)\s+#?(?P<bug>\d+(?!\d*[\-\.]\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*[\-\.]\d+))*)"""
+        r"""\b(?P<bt>(([a-z0-9]+)?\s+bugs?|[a-z0-9]+)):?\s+#?(?P<bug>\d+(?!\d*[\-\.]\d+)((,|\s*(and|en|et|und|ir))\s*#?\d+(?!\d*[\-\.]\d+))*)"""
         channel = ircutils.isChannel(msg.args[0]) and msg.args[0] or None
         if not self.registryValue('bugSnarfer', channel):
             return
