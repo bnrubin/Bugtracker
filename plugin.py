@@ -450,7 +450,7 @@ class Bugtracker(callbacks.PluginRegexp):
             return
         if not self.is_ok(channel, 'lpoops', oopsid):
             return
-        irc.reply('https://oops.canonical.com/?oopsid=' + oopsid, prefixNick=False)
+        irc.reply('https://oops.canonical.com/?oopsid=OOPS-' + oopsid, prefixNick=False)
 
     def cveSnarfer(self, irc, msg, match):
         r"(cve[- ]\d{4}[- ]\d{4})"
