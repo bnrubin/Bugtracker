@@ -369,6 +369,7 @@ class Bugtracker(callbacks.PluginRegexp):
         if bt and bt[0].endswith(':'):
             bt[0] = bt[:-1]
         name = ''
+        showTracker = True
         if len(bt) == 1 and not (bt[0] in ['bug','bugs']):
             try:
                 name = bt[0]
@@ -383,6 +384,7 @@ class Bugtracker(callbacks.PluginRegexp):
                 name = ''
                 pass
         if not name:
+            showTracker = False
             snarfTarget = self.registryValue('snarfTarget', channel)
             if not snarfTarget:
                 self.log.warning("Bugtracker: no snarfTarget for Bugtracker")
@@ -401,7 +403,7 @@ class Bugtracker(callbacks.PluginRegexp):
             for bugid in bugids:
                 bugid = int(bugid)
                 try:
-                    report = self.get_bug(channel,tracker,bugid,self.registryValue('showassignee', channel))
+                    report = self.get_bug(channel,tracker,bugid,self.registryValue('showassignee', channel), show_tracker=showTracker)
                 except BugNotFoundError:
                     if self.registryValue('replyWhenNotFound'):
                         irc.error("%s bug %d could not be found" % (tracker.description, bugid))
@@ -527,7 +529,7 @@ class Bugtracker(callbacks.PluginRegexp):
                 return tracker
         return None
 
-    def get_bug(self, channel, tracker, id, do_assignee, do_url = True):
+    def get_bug(self, channel, tracker, id, do_assignee, do_url = True, show_tracker = True):
         reports = []
         if not self.is_ok(channel, tracker, id):
             return []
@@ -541,20 +543,23 @@ class Bugtracker(callbacks.PluginRegexp):
 
             severity = severity[0].upper() + severity[1:].lower()
             status = status[0].upper() + status[1:].lower()
+            tracker_name = tracker.description + ' '
             if not do_url:
                 url = ''
+            if not show_tracker:
+                tracker_name = ''
             if product:
                 if showext:
-                    reports.append("%s bug %s in %s \"%s\" %s [%s,%s] %s" % (tracker.description, bid, product, 
+                    reports.append("%sbug %s in %s \"%s\" %s [%s,%s] %s" % (tracker_name, bid, product, 
                                                                           title, extinfo, severity, status, url))
                 else:
-                    reports.append("%s bug %s in %s \"%s\" [%s,%s] %s" % (tracker.description, bid, product, 
+                    reports.append("%sbug %s in %s \"%s\" [%s,%s] %s" % (tracker_name, bid, product, 
                                                                           title, severity, status, url))
             else:
                 if showext:
-                    reports.append("%s bug %s \"%s\" %s [%s,%s] %s" % (tracker.description, bid, title, extinfo, severity, status, url))
+                    reports.append("%sbug %s \"%s\" %s [%s,%s] %s" % (tracker_name, bid, title, extinfo, severity, status, url))
                 else:
-                    reports.append("%s bug %s \"%s\" [%s,%s] %s" % (tracker.description, bid, title, severity, status, url))
+                    reports.append("%sbug %s \"%s\" [%s,%s] %s" % (tracker_name, bid, title, severity, status, url))
             if do_assignee and assignee:
                 reports[-1] = reports[-1] + (" - Assigned to %s" % assignee)
         return reports
